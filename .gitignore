@@ -1,0 +1,33 @@
+# В корне fullstack создаем .gitignore
+@"
+# Виртуальное окружение
+venv/
+.env
+*.pyc
+
+# Логи
+*.log
+
+# IDE
+.vscode/
+.idea/
+__pycache__/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# БД
+*.db
+*.sqlite3
+
+# Фронтенд (добавим позже)
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+
+# Python
+*.egg-info/
+build/
+dist/
+"@ | Out-File -FilePath .gitignore -Encoding UTF8
