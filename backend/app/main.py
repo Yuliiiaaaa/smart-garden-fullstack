@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from app.api.endpoints import health, auth, gardens, trees, analysis, analytics
+import uvicorn
 
 app = FastAPI(
     title="Smart Garden API",
@@ -18,3 +19,12 @@ app.include_router(analytics.router, prefix="/api/v1/analytics", tags=["analytic
 @app.get("/")
 async def root():
     return {"message": "Добро пожаловать в Smart Garden API!"}
+
+# Запуск сервера
+if __name__ == "__main__":
+    uvicorn.run(
+        "app.main:app",
+        host="0.0.0.0",
+        port=8000,
+        reload=True
+    )
