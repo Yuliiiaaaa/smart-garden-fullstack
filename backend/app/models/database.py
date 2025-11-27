@@ -3,6 +3,8 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from datetime import datetime
 import os
+from sqlalchemy import Boolean, String
+import secrets
 
 # Создаем базовый класс для моделей
 Base = declarative_base()
@@ -42,6 +44,18 @@ class HarvestRecord(Base):
     fruit_count = Column(Integer, nullable=False)
     image_path = Column(String(255), nullable=True)
     confidence_score = Column(Float, nullable=True)  # точность ИИ анализа
+
+class User(Base):
+    """Модель пользователя"""
+    __tablename__ = "users"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String(100), unique=True, index=True, nullable=False)
+    hashed_password = Column(String(255), nullable=False)
+    full_name = Column(String(100), nullable=False)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
 
 # Настройка подключения к БД
 DATABASE_URL = "sqlite:///./smart_garden.db"

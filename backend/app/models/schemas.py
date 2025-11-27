@@ -2,6 +2,8 @@ from pydantic import BaseModel, Field, validator
 from typing import Optional, List
 from datetime import datetime
 from enum import Enum
+from pydantic import EmailStr
+from typing import Optional
 
 class FruitType(str, Enum):
     APPLE = "apple"
@@ -64,3 +66,31 @@ class Tree(TreeBase):
     
     class Config:
         from_attributes = True
+
+# Схемы для аутентификации
+class UserBase(BaseModel):
+    email: EmailStr
+    full_name: str
+
+class UserCreate(UserBase):
+    password: str = Field(..., min_length=6, description="Пароль должен быть не менее 6 символов")
+
+class UserLogin(BaseModel):
+    email: EmailStr
+    password: str
+
+class User(UserBase):
+    id: int
+    is_active: bool
+    created_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+    user: User
+
+class TokenData(BaseModel):
+    email: Optional[str] = None

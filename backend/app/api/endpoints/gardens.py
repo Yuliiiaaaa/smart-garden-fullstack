@@ -2,8 +2,9 @@ from fastapi import APIRouter, HTTPException, Depends, status
 from sqlalchemy.orm import Session
 from typing import List
 
-from app.models.database import get_db, Garden
+from app.models.database import get_db, Garden, User
 from app.models.schemas import GardenCreate, GardenUpdate, Garden as GardenSchema
+from app.api.dependencies import get_current_user
 
 router = APIRouter()
 
@@ -11,7 +12,8 @@ router = APIRouter()
 async def get_gardens(
     skip: int = 0, 
     limit: int = 100,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)  # Добавляем аутентификацию
 ):
     """Получить список всех садов с пагинацией"""
     try:
@@ -24,7 +26,11 @@ async def get_gardens(
         )
 
 @router.get("/{garden_id}", response_model=GardenSchema)
-async def get_garden(garden_id: int, db: Session = Depends(get_db)):
+async def get_garden(
+    garden_id: int, 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)  # Добавляем аутентификацию
+):
     """Получить информацию о конкретном саде по ID"""
     garden = db.query(Garden).filter(Garden.id == garden_id).first()
     if not garden:
@@ -35,7 +41,11 @@ async def get_garden(garden_id: int, db: Session = Depends(get_db)):
     return garden
 
 @router.post("/", response_model=GardenSchema, status_code=status.HTTP_201_CREATED)
-async def create_garden(garden: GardenCreate, db: Session = Depends(get_db)):
+async def create_garden(
+    garden: GardenCreate, 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)  # Добавляем аутентификацию
+):
     """Создать новый сад"""
     try:
         # Проверяем, нет ли сада с таким же названием
@@ -67,7 +77,8 @@ async def create_garden(garden: GardenCreate, db: Session = Depends(get_db)):
 async def update_garden(
     garden_id: int, 
     garden_update: GardenUpdate, 
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)  # Добавляем аутентификацию
 ):
     """Обновить информацию о саде"""
     try:
@@ -98,7 +109,11 @@ async def update_garden(
         )
 
 @router.delete("/{garden_id}")
-async def delete_garden(garden_id: int, db: Session = Depends(get_db)):
+async def delete_garden(
+    garden_id: int, 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)  # Добавляем аутентификацию
+):
     """Удалить сад"""
     try:
         db_garden = db.query(Garden).filter(Garden.id == garden_id).first()
