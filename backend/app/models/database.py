@@ -57,6 +57,7 @@ class User(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
+
 # Настройка подключения к БД
 DATABASE_URL = "sqlite:///./smart_garden.db"
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
@@ -74,3 +75,31 @@ def get_db():
         yield db
     finally:
         db.close()
+
+# Создаем тестового пользователя если его нет
+def create_test_user():
+    """Создает тестового пользователя при запуске"""
+    db = SessionLocal()
+    try:
+        from app.core.security import get_password_hash
+        
+        # Проверяем есть ли уже тестовый пользователь
+        test_user = db.query(User).filter(User.email == "test@example.com").first()
+        if not test_user:
+            hashed_password = get_password_hash("testpassword123")
+            test_user = User(
+                email="test@example.com",
+                full_name="Тестовый Пользователь",
+                hashed_password=hashed_password
+            )
+            db.add(test_user)
+            db.commit()
+            print("✅ Создан тестовый пользователь: test@example.com / testpassword123")
+    except Exception as e:
+        print(f"⚠️  Ошибка при создании тестового пользователя: {e}")
+        db.rollback()
+    finally:
+        db.close()
+
+# Вызываем создание тестового пользователя
+create_test_user()

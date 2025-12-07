@@ -1,24 +1,23 @@
 from datetime import datetime, timedelta
 from jose import JWTError, jwt
-from passlib.context import CryptContext
+import hashlib
 from app.models.schemas import TokenData
 import os
 
 # Секретный ключ для JWT
-SECRET_KEY = "your-secret-key-here-change-in-production"  # В продакшене заменить!
+SECRET_KEY = "your-secret-key-for-testing-change-in-production"  # В продакшене заменить!
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
-# Контекст для хеширования паролей
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# Упрощенная функция хеширования (без bcrypt для Windows)
+def get_password_hash(password: str) -> str:
+    """Создает упрощенный хеш пароля"""
+    salt = "smart-garden-salt"  # Соль для хеширования
+    return hashlib.sha256((password + salt).encode()).hexdigest()
 
-def verify_password(plain_password, hashed_password):
+def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Проверяет соответствие пароля и хеша"""
-    return pwd_context.verify(plain_password, hashed_password)
-
-def get_password_hash(password):
-    """Создает хеш пароля"""
-    return pwd_context.hash(password)
+    return get_password_hash(plain_password) == hashed_password
 
 def create_access_token(data: dict, expires_delta: timedelta = None):
     """Создает JWT токен"""
@@ -26,7 +25,7 @@ def create_access_token(data: dict, expires_delta: timedelta = None):
     if expires_delta:
         expire = datetime.utcnow() + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(minutes=15)
+        expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)

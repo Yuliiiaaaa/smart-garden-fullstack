@@ -4,13 +4,21 @@ from sqlalchemy.orm import Session
 from app.core.security import verify_token
 from app.models.database import get_db, User
 
-security = HTTPBearer()
+# Используем HTTPBearer для получения токена
+security = HTTPBearer(auto_error=False)  # auto_error=False чтобы не было ошибки если нет токена
 
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
     db: Session = Depends(get_db)
 ):
     """Получает текущего пользователя из токена"""
+    if credentials is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Требуется авторизация",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
     token = credentials.credentials
     token_data = verify_token(token)
     
@@ -35,9 +43,3 @@ async def get_current_user(
         )
     
     return user
-
-async def get_current_active_user(current_user: User = Depends(get_current_user)):
-    """Проверяет что пользователь активен"""
-    if not current_user.is_active:
-        raise HTTPException(status_code=400, detail="Неактивный пользователь")
-    return current_user

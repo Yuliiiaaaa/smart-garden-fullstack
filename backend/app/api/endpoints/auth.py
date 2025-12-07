@@ -1,5 +1,4 @@
 from fastapi import APIRouter, HTTPException, status, Depends
-from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from datetime import timedelta
 
@@ -7,7 +6,7 @@ from app.models.database import get_db, User
 from app.models.schemas import UserCreate, User as UserSchema, Token, UserLogin
 from app.core.security import (
     get_password_hash, verify_password, create_access_token, 
-    ACCESS_TOKEN_EXPIRE_MINUTES, SECRET_KEY, ALGORITHM
+    ACCESS_TOKEN_EXPIRE_MINUTES
 )
 from app.api.dependencies import get_current_user
 
@@ -49,12 +48,12 @@ async def register(user_data: UserCreate, db: Session = Depends(get_db)):
         )
 
 @router.post("/login", response_model=Token)
-async def login(form_data: UserLogin, db: Session = Depends(get_db)):
+async def login(user_data: UserLogin, db: Session = Depends(get_db)):
     """Аутентификация пользователя"""
     # Ищем пользователя по email
-    user = db.query(User).filter(User.email == form_data.email).first()
+    user = db.query(User).filter(User.email == user_data.email).first()
     
-    if not user or not verify_password(form_data.password, user.hashed_password):
+    if not user or not verify_password(user_data.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Неверный email или пароль",
@@ -75,7 +74,13 @@ async def login(form_data: UserLogin, db: Session = Depends(get_db)):
     return {
         "access_token": access_token,
         "token_type": "bearer",
-        "user": user
+        "user": {
+            "id": user.id,
+            "email": user.email,
+            "full_name": user.full_name,
+            "is_active": user.is_active,
+            "created_at": user.created_at.isoformat() if user.created_at else None
+        }
     }
 
 @router.get("/me", response_model=UserSchema)
@@ -83,15 +88,4 @@ async def get_current_user_info(current_user: User = Depends(get_current_user)):
     """Получить информацию о текущем пользователе"""
     return current_user
 
-@router.post("/refresh")
-async def refresh_token(current_user: User = Depends(get_current_user)):
-    """Обновить токен"""
-    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(
-        data={"sub": current_user.email}, expires_delta=access_token_expires
-    )
-    
-    return {
-        "access_token": access_token,
-        "token_type": "bearer"
-    }
+# Убираем /refresh для упрощения
