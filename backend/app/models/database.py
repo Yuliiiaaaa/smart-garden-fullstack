@@ -5,6 +5,7 @@ from datetime import datetime
 import os
 from sqlalchemy import Boolean, String
 import secrets
+from sqlalchemy import Enum as SQLEnum
 
 # Создаем базовый класс для моделей
 Base = declarative_base()
@@ -53,6 +54,7 @@ class User(Base):
     email = Column(String(100), unique=True, index=True, nullable=False)
     hashed_password = Column(String(255), nullable=False)
     full_name = Column(String(100), nullable=False)
+    role = Column(String(20), default="user", nullable=False)  # admin, manager, user
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
@@ -76,30 +78,61 @@ def get_db():
     finally:
         db.close()
 
-# Создаем тестового пользователя если его нет
-def create_test_user():
-    """Создает тестового пользователя при запуске"""
+def create_test_users():
+    """Создает тестовых пользователей с разными ролями"""
     db = SessionLocal()
     try:
         from app.core.security import get_password_hash
         
-        # Проверяем есть ли уже тестовый пользователь
-        test_user = db.query(User).filter(User.email == "test@example.com").first()
-        if not test_user:
-            hashed_password = get_password_hash("testpassword123")
-            test_user = User(
-                email="test@example.com",
-                full_name="Тестовый Пользователь",
-                hashed_password=hashed_password
+        # Удаляем старых тестовых пользователей (опционально)
+        db.query(User).filter(User.email.in_([
+            "admin@example.com",
+            "manager@example.com", 
+            "user@example.com",
+            "test@example.com"
+        ])).delete(synchronize_session=False)
+        
+        # Список тестовых пользователей с разными ролями
+        test_users = [
+            {
+                "email": "admin@example.com",
+                "full_name": "Администратор Системы", 
+                "password": "admin123",
+                "role": "admin"
+            },
+            {
+                "email": "manager@example.com",
+                "full_name": "Менеджер Садов",
+                "password": "manager123",
+                "role": "manager"
+            },
+            {
+                "email": "user@example.com",
+                "full_name": "Обычный Пользователь",
+                "password": "user123",
+                "role": "user"
+            }
+        ]
+        
+        for user_data in test_users:
+            hashed_password = get_password_hash(user_data["password"])
+            new_user = User(
+                email=user_data["email"],
+                full_name=user_data["full_name"],
+                hashed_password=hashed_password,
+                role=user_data["role"]
             )
-            db.add(test_user)
-            db.commit()
-            print("✅ Создан тестовый пользователь: test@example.com / testpassword123")
+            db.add(new_user)
+            print(f"✅ Создан пользователь: {user_data['email']} ({user_data['role']})")
+        
+        db.commit()
+        print("🎉 Тестовые пользователи успешно созданы!")
+        
     except Exception as e:
-        print(f"⚠️  Ошибка при создании тестового пользователя: {e}")
+        print(f"⚠️  Ошибка при создании тестовых пользователей: {e}")
         db.rollback()
     finally:
         db.close()
 
-# Вызываем создание тестового пользователя
-create_test_user()
+# Обновляем вызов
+create_test_users()

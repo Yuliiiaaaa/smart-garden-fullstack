@@ -1,10 +1,8 @@
 ﻿from fastapi import FastAPI, Depends
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.middleware.cors import CORSMiddleware
 from app.api.endpoints import health, auth, gardens, trees, analysis, analytics
+from app.middleware.auth_middleware import auth_middleware, role_middleware
 import uvicorn
-
-# Создаем OAuth2 схему для Swagger
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
 app = FastAPI(
     title="Smart Garden API",
@@ -12,34 +10,28 @@ app = FastAPI(
     version="1.0.0",
     docs_url="/docs",
     redoc_url="/redoc",
-    # Добавляем настройки авторизации для Swagger
     openapi_tags=[
-        {
-            "name": "health",
-            "description": "Health check endpoints"
-        },
-        {
-            "name": "authentication",
-            "description": "Authentication endpoints"
-        },
-        {
-            "name": "gardens",
-            "description": "Operations with gardens"
-        },
-        {
-            "name": "trees",
-            "description": "Operations with trees"
-        },
-        {
-            "name": "analysis",
-            "description": "Photo analysis endpoints"
-        },
-        {
-            "name": "analytics",
-            "description": "Analytics endpoints"
-        }
+        {"name": "health", "description": "Health check endpoints"},
+        {"name": "authentication", "description": "Authentication endpoints"},
+        {"name": "gardens", "description": "Operations with gardens"},
+        {"name": "trees", "description": "Operations with trees"},
+        {"name": "analysis", "description": "Photo analysis endpoints"},
+        {"name": "analytics", "description": "Analytics endpoints"}
     ]
 )
+
+# CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Кастомные middleware для аутентификации и авторизации
+app.middleware("http")(auth_middleware)
+app.middleware("http")(role_middleware)
 
 # Подключаем роутеры
 app.include_router(health.router, prefix="/api/v1", tags=["health"])
@@ -54,9 +46,9 @@ async def root():
     return {"message": "Добро пожаловать в Smart Garden API!"}
 
 @app.get("/api/status")
-async def api_status(token: str = Depends(oauth2_scheme)):
-    """Проверка статуса API с аутентификацией"""
-    return {"status": "API is running", "authenticated": True}
+async def api_status():
+    """Публичный эндпоинт для проверки статуса API"""
+    return {"status": "API is running", "authenticated": False}
 
 # Запуск сервера
 if __name__ == "__main__":

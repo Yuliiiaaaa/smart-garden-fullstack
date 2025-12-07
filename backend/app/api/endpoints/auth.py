@@ -29,7 +29,8 @@ async def register(user_data: UserCreate, db: Session = Depends(get_db)):
         db_user = User(
             email=user_data.email,
             hashed_password=hashed_password,
-            full_name=user_data.full_name
+            full_name=user_data.full_name,
+            role=user_data.role  # Сохраняем роль
         )
         
         db.add(db_user)
@@ -65,10 +66,14 @@ async def login(user_data: UserLogin, db: Session = Depends(get_db)):
             detail="Пользователь деактивирован",
         )
     
-    # Создаем токен
+    # Создаем токен с role в payload
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
-        data={"sub": user.email}, expires_delta=access_token_expires
+        data={
+            "sub": user.email,
+            "role": user.role  # Добавляем роль в токен
+        }, 
+        expires_delta=access_token_expires
     )
     
     return {
@@ -78,6 +83,7 @@ async def login(user_data: UserLogin, db: Session = Depends(get_db)):
             "id": user.id,
             "email": user.email,
             "full_name": user.full_name,
+            "role": user.role,  # Добавляем роль в ответ
             "is_active": user.is_active,
             "created_at": user.created_at.isoformat() if user.created_at else None
         }
@@ -87,5 +93,3 @@ async def login(user_data: UserLogin, db: Session = Depends(get_db)):
 async def get_current_user_info(current_user: User = Depends(get_current_user)):
     """Получить информацию о текущем пользователе"""
     return current_user
-
-# Убираем /refresh для упрощения

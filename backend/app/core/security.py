@@ -36,8 +36,42 @@ def verify_token(token: str):
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         email: str = payload.get("sub")
+        role: str = payload.get("role", "user")  # Получаем роль из токена
         if email is None:
             return None
-        return TokenData(email=email)
+        return TokenData(email=email, role=role)  # Возвращаем с ролью
     except JWTError:
+        return None
+
+def create_access_token(data: dict, expires_delta: timedelta = None):
+    """Создает JWT токен с role в payload"""
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+    
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+def verify_token_with_claims(token: str):
+    """Проверяет JWT токен со всеми claims"""
+    try:
+        payload = jwt.decode(
+            token, 
+            SECRET_KEY, 
+            algorithms=[ALGORITHM],
+            issuer="smart-garden-api",
+            audience="smart-garden-app"
+        )
+        email: str = payload.get("sub")
+        role: str = payload.get("role", "user")
+        if email is None:
+            return None
+        return TokenData(email=email, role=role)
+    except JWTError as e:
+        print(f"JWT Error: {e}")
         return None

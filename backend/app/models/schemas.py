@@ -68,14 +68,20 @@ class Tree(TreeBase):
         from_attributes = True
 
 # Схемы для аутентификации
+class UserRole(str, Enum):
+    ADMIN = "admin"
+    MANAGER = "manager"
+    USER = "user"
+
 class UserBase(BaseModel):
     email: EmailStr
     full_name: str
+    role: UserRole = Field(default=UserRole.USER, description="Роль пользователя")
 
 class UserCreate(UserBase):
     password: str = Field(..., min_length=6, description="Пароль должен быть не менее 6 символов")
 
-class UserLogin(BaseModel):
+class UserLogin(BaseModel):  # ДОБАВЛЯЕМ ЭТОТ КЛАСС
     email: EmailStr
     password: str
 
@@ -94,3 +100,4 @@ class Token(BaseModel):
 
 class TokenData(BaseModel):
     email: Optional[str] = None
+    role: Optional[str] = None  # Добавляем роль в TokenData
