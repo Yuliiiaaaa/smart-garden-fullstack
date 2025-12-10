@@ -2,269 +2,267 @@ import requests
 import time
 import os
 from io import BytesIO
-from PIL import Image, ImageDraw
-import random
+from PIL import Image, ImageDraw, ImageFont
+import numpy as np
+import json
 
 BASE_URL = "http://localhost:8000/api/v1"
 
-def create_any_image():
-    """Создает ЛЮБОЕ изображение - хоть пустое"""
-    # Создаем случайное изображение
+def create_realistic_fruit_image_with_count(target_count: int = 14):
+    """Создает тестовое изображение с ЗАРАНЕЕ ИЗВЕСТНЫМ количеством плодов"""
     width, height = 800, 600
     
-    # Случайный цвет фона
-    bg_color = (
-        random.randint(0, 255),
-        random.randint(0, 255), 
-        random.randint(0, 255)
-    )
-    
-    img = Image.new('RGB', (width, height), color=bg_color)
+    # Фон - зеленая листва
+    img = Image.new('RGB', (width, height), color=(34, 139, 34))
     draw = ImageDraw.Draw(img)
     
-    # Рисуем случайные фигуры (чтобы было не совсем пусто)
-    for _ in range(5):
-        x1 = random.randint(0, width)
-        y1 = random.randint(0, height)
-        x2 = random.randint(x1, width)
-        y2 = random.randint(y1, height)
+    # Ветки
+    draw.line([(100, 100), (700, 150)], fill=(101, 67, 33), width=15)
+    
+    # Рисуем ТОЧНО target_count яблок
+    fruits = []
+    
+    # Распределяем равномерно
+    rows = int(np.sqrt(target_count)) + 1
+    cols = (target_count + rows - 1) // rows
+    
+    cell_width = (width - 200) // cols
+    cell_height = (height - 200) // rows
+    
+    for i in range(target_count):
+        row = i // cols
+        col = i % cols
         
-        color = (
-            random.randint(0, 255),
-            random.randint(0, 255),
-            random.randint(0, 255)
-        )
+        # Центр ячейки + небольшой случайный сдвиг
+        x = 100 + col * cell_width + cell_width // 2 + np.random.randint(-30, 30)
+        y = 100 + row * cell_height + cell_height // 2 + np.random.randint(-30, 30)
+        size = np.random.randint(25, 40)
         
-        draw.rectangle([x1, y1, x2, y2], fill=color)
+        # Цвет яблока (красный с вариациями)
+        red = np.random.randint(200, 255)
+        green = np.random.randint(0, 50)
+        blue = np.random.randint(0, 50)
+        
+        # Рисуем яблоко
+        draw.ellipse([x-size, y-size, x+size, y+size], 
+                    fill=(red, green, blue), 
+                    outline=(150, 0, 0))
+        
+        # Блик
+        draw.ellipse([x-size//3, y-size//3, x-size//6, y-size//6], 
+                    fill=(255, 255, 255, 128))
+        
+        fruits.append({
+            'x': x - size,
+            'y': y - size,
+            'size': size * 2
+        })
+    
+    # Подписываем количество
+    try:
+        font = ImageFont.truetype("arial.ttf", 24)
+    except:
+        font = ImageFont.load_default()
+    
+    draw.text((10, 10), f"ТЕСТ: {target_count} яблок", fill=(255, 255, 255), font=font)
     
     # Сохраняем
     img_byte_arr = BytesIO()
-    img.save(img_byte_arr, format='JPEG')
+    img.save(img_byte_arr, format='JPEG', quality=95)
     img_byte_arr.seek(0)
     
-    return img_byte_arr
+    return img_byte_arr, fruits
 
-def test_ai_analysis():
-    print("🎯 Тестирование ИИ, который ВСЕГДА находит плоды")
+def test_with_exact_count():
+    """Тест с ЗАРАНЕЕ ИЗВЕСТНЫМ количеством плодов"""
+    print("🎯 Тест с известным количеством плодов")
     print("=" * 60)
     
-    # 1. Авторизация
-    print("\n1. Авторизация...")
+    target_count = 14  # Точно 14 яблок!
+    
+    # 1. Создаем изображение
+    print(f"\n1. Создаем изображение с {target_count} яблоками...")
+    test_image, actual_fruits = create_realistic_fruit_image_with_count(target_count)
+    
+    # Сохраняем для просмотра
+    with open(f"test_{target_count}_apples.jpg", "wb") as f:
+        f.write(test_image.getvalue())
+    print(f"💾 Изображение сохранено: test_{target_count}_apples.jpg")
+    
+    # 2. Авторизация
+    print("\n2. Авторизация...")
     response = requests.post(f"{BASE_URL}/auth/login", json={
         "email": "admin@example.com",
         "password": "admin123"
     })
     
     if response.status_code != 200:
-        print("❌ Ошибка входа. Создаем тестового пользователя...")
-        # Попробуем зарегистрироваться
-        response = requests.post(f"{BASE_URL}/auth/register", json={
-            "email": "test@test.com",
-            "password": "test123",
-            "full_name": "Тестовый Пользователь"
-        })
-        
-        if response.status_code == 201:
-            print("✅ Тестовый пользователь создан")
-            response = requests.post(f"{BASE_URL}/auth/login", json={
-                "email": "test@test.com",
-                "password": "test123"
-            })
-    
-    if response.status_code != 200:
-        print(f"❌ Не удалось войти: {response.text}")
+        print("❌ Ошибка авторизации")
         return
     
     token_data = response.json()
     token = token_data['access_token']
     headers = {"Authorization": f"Bearer {token}"}
     
-    print("✅ Успешный вход!")
+    print("✅ Успешная авторизация")
     
-    # 2. Тест 1: Пустое изображение
-    print("\n2. Тест 1: Пустое/случайное изображение")
-    test_image = create_any_image()
+    # 3. Анализ
+    print(f"\n3. Анализ изображения (ожидаем ~{target_count} плодов)...")
+    files = {"file": (f"test_{target_count}.jpg", test_image, "image/jpeg")}
     
-    files = {"file": ("test.jpg", test_image, "image/jpeg")}
-    
+    start_time = time.time()
     response = requests.post(
         f"{BASE_URL}/analysis/photo",
         headers=headers,
         files=files,
         data={"fruit_type": "apple"}
     )
+    processing_time = time.time() - start_time
     
     if response.status_code == 200:
         result = response.json()
-        print(f"✅ УСПЕХ! Найдено плодов: {result['fruit_count']}")
+        detected_count = result['fruit_count']
+        error = abs(detected_count - target_count)
+        error_percent = (error / target_count) * 100
+        
+        print(f"✅ Анализ завершен за {processing_time:.2f} сек")
+        print(f"   🎯 Ожидалось: {target_count} плодов")
+        print(f"   🍎 Обнаружено: {detected_count} плодов")
+        print(f"   📊 Погрешность: {error} плодов ({error_percent:.1f}%)")
         print(f"   🎯 Уверенность: {result['confidence']:.2%}")
         print(f"   🤖 Метод: {result['method']}")
-        print(f"   💡 Рекомендации: {result['recommendations'][:100]}...")
+        
+        # Оценка точности
+        if error <= 2:
+            print(f"   🏆 ТОЧНОСТЬ: ОТЛИЧНАЯ! (погрешность ≤ 2 плода)")
+        elif error <= 5:
+            print(f"   👍 ТОЧНОСТЬ: ХОРОШАЯ (погрешность ≤ 5 плодов)")
+        elif error <= 10:
+            print(f"   ⚠️  ТОЧНОСТЬ: СРЕДНЯЯ (погрешность ≤ 10 плодов)")
+        else:
+            print(f"   ❗ ТОЧНОСТЬ: НИЗКАЯ (погрешность > 10 плодов)")
+        
+        # Детали
+        if 'debug_info' in result:
+            print(f"   🔍 Детали: сырых обнаружений: {result['debug_info'].get('raw_detections', 'N/A')}")
+        
+        return result
     else:
-        print(f"❌ Ошибка: {response.status_code} - {response.text}")
-    
-    # 3. Тест 2: Другой тип фрукта
-    print("\n3. Тест 2: Поиск груш")
-    test_image.seek(0)
-    files = {"file": ("test2.jpg", test_image, "image/jpeg")}
-    
-    response = requests.post(
-        f"{BASE_URL}/analysis/photo",
-        headers=headers,
-        files=files,
-        data={"fruit_type": "pear"}
-    )
-    
-    if response.status_code == 200:
-        result = response.json()
-        print(f"✅ УСПЕХ! Найдено груш: {result['fruit_count']}")
-    
-    # 4. Тест 3: История анализов
-    print("\n4. Тест 3: Проверка истории")
-    response = requests.get(f"{BASE_URL}/analysis/history", headers=headers)
-    
-    if response.status_code == 200:
-        history = response.json()
-        print(f"✅ История доступна")
-        print(f"   📊 Всего анализов: {history['total']}")
-        
-        if history['analyses']:
-            print(f"   📋 Последние анализы:")
-            for analysis in history['analyses'][:3]:  # Первые 3
-                print(f"      • ID {analysis['id']}: {analysis['fruit_count']} плодов")
-    
-    # 5. Тест 4: Загрузка реального фото (если есть)
-    print("\n5. Тест 4: Попробуйте загрузить реальное фото")
-    print("   📱 Откройте в браузере: http://localhost:8000/docs")
-    print("   🔐 Авторизуйтесь (admin@example.com / admin123)")
-    print("   📸 Используйте /api/v1/analysis/photo для загрузки")
-    
-    return True
+        print(f"❌ Ошибка анализа: {response.status_code} - {response.text}")
+        return None
 
-def test_with_real_photo():
-    """Тест с реальным фото если оно есть"""
-    print("\n🔍 Поиск реальных фото для теста...")
+def manual_correction_test():
+    """Тест ручной коррекции результатов"""
+    print("\n\n🛠️ Тест ручной коррекции")
+    print("=" * 60)
     
-    possible_paths = [
-        "test_photo.jpg",
-        "apple.jpg", 
-        "fruit.jpg",
-        "tree.jpg",
-        "garden.jpg"
-    ]
+    print("Если система считает неправильно (например, 45 вместо 14):")
+    print("1. Можно использовать коэффициент коррекции")
+    print("2. Или настроить детектор на меньшую чувствительность")
     
-    for path in possible_paths:
-        if os.path.exists(path):
-            print(f"✅ Найдено фото: {path}")
-            
-            # Авторизация
-            response = requests.post(f"{BASE_URL}/auth/login", json={
-                "email": "admin@example.com",
-                "password": "admin123"
-            })
-            
-            if response.status_code != 200:
-                print("❌ Не удалось войти")
-                return
-            
-            token_data = response.json()
-            token = token_data['access_token']
-            headers = {"Authorization": f"Bearer {token}"}
-            
-            # Загружаем фото
-            with open(path, "rb") as f:
-                files = {"file": (path, f, "image/jpeg")}
-                
-                response = requests.post(
-                    f"{BASE_URL}/analysis/photo",
-                    headers=headers,
-                    files=files,
-                    data={"fruit_type": "apple"}
-                )
-            
-            if response.status_code == 200:
-                result = response.json()
-                print(f"🎉 АНАЛИЗ РЕАЛЬНОГО ФОТО УСПЕШЕН!")
-                print(f"   🍎 Найдено плодов: {result['fruit_count']}")
-                print(f"   🎯 Уверенность: {result['confidence']:.2%}")
-                print(f"   🤖 Метод: {result['method']}")
-                return True
+    correction_factors = {
+        'очень чувствительный': 0.3,  # Находит много ложных срабатываний
+        'чувствительный': 0.5,
+        'средний': 0.7,  # По умолчанию
+        'строгий': 0.9,
+        'очень строгий': 1.2  # Может пропускать реальные плоды
+    }
     
-    print("ℹ️  Реальные фото не найдены. Можете загрузить через Swagger!")
-    return False
+    print("\n📊 Коэффициенты коррекции для яблок:")
+    for level, factor in correction_factors.items():
+        print(f"   • {level}: ×{factor}")
+    
+    print("\n💡 Как исправить если считает 45 вместо 14:")
+    print("   45 × 0.3 ≈ 13.5 (близко к 14!)")
+    print("   Нужно уменьшить чувствительность детектора")
 
-def run_demo_server():
-    """Запускает демо-сервер если основной не работает"""
-    import subprocess
-    import sys
+def test_different_accuracy_levels():
+    """Тестирование разных уровней точности"""
+    print("\n\n🔧 Тестирование разных уровней точности")
+    print("=" * 60)
     
-    print("\n🚀 Запуск демо-сервера...")
+    # Импортируем детектор напрямую
+    from app.services.improved_detector import ImprovedFruitDetector
     
-    # Проверяем запущен ли сервер
-    try:
-        response = requests.get("http://localhost:8000/", timeout=2)
-        print("✅ Сервер уже запущен")
-        return True
-    except:
-        print("⚠️  Сервер не запущен. Запускаем...")
+    # Создаем тестовое изображение
+    test_image, _ = create_realistic_fruit_image_with_count(14)
+    image_bytes = test_image.getvalue()
+    
+    levels = ['low', 'medium', 'high']
+    
+    for level in levels:
+        print(f"\nУровень точности: {level.upper()}")
+        print("-" * 40)
         
-        # Запускаем сервер в фоне
-        import threading
-        import time
+        detector = ImprovedFruitDetector(accuracy_level=level)
+        start_time = time.time()
+        result = detector.detect(image_bytes, 'apple')
+        processing_time = time.time() - start_time
         
-        def run_server():
-            os.system("python -m app.main")
-        
-        server_thread = threading.Thread(target=run_server, daemon=True)
-        server_thread.start()
-        
-        # Ждем запуска
-        for i in range(10):
-            try:
-                response = requests.get("http://localhost:8000/", timeout=1)
-                if response.status_code == 200:
-                    print(f"✅ Сервер запущен за {i+1} секунд")
-                    return True
-            except:
-                time.sleep(1)
-        
-        print("❌ Не удалось запустить сервер")
-        return False
+        print(f"   Найдено плодов: {result['total_fruits']}")
+        print(f"   Время: {processing_time:.2f} сек")
+        print(f"   Метод: {result['method']}")
+        print(f"   Уверенность: {result['confidence']:.2%}")
+
+def create_calibration_tool():
+    """Создает инструмент для калибровки"""
+    print("\n\n🎛️ Инструмент для калибровки детектора")
+    print("=" * 60)
+    
+    calibration_guide = """
+    Как откалибровать детектор для ВАШЕГО сада:
+    
+    1. Сделайте 5-10 фото разных деревьев
+    2. Вручную посчитайте плоды на каждом фото
+    3. Запустите анализ через API
+    4. Сравните результаты:
+    
+    Фото | Реально | Детектор | Коэффициент
+    -----|---------|----------|------------
+    #1   |   14    |    45    | 14/45 = 0.31
+    #2   |   23    |    38    | 23/38 = 0.61
+    #3   |   17    |    52    | 17/52 = 0.33
+    
+    5. Вычислите средний коэффициент: (0.31 + 0.61 + 0.33) / 3 = 0.42
+    6. Установите этот коэффициент в детекторе!
+    
+    💡 Советы:
+    • Используйте фото при одинаковом освещении
+    • Избегайте бликов и теней
+    • Фотографируйте с одинакового расстояния
+    • Лучшее время: утро или вечер, пасмурная погода
+    """
+    
+    print(calibration_guide)
 
 if __name__ == "__main__":
     print("=" * 70)
-    print("          ИИ ДЛЯ САДОВОДСТВА - ВСЕГДА РАБОТАЕТ!")
+    print("          УЛУЧШЕННЫЙ ИИ С НАСТРАИВАЕМОЙ ТОЧНОСТЬЮ")
     print("=" * 70)
     
-    # Пробуем запустить сервер
-    if not run_demo_server():
-        print("\n⚠️  Запустите сервер вручную:")
-        print("   cd backend")
-        print("   python -m app.main")
-        print("\nЗатем запустите этот тест снова")
-        exit(1)
+    # Тест с известным количеством
+    result = test_with_exact_count()
     
-    # Ждем немного
-    import time
-    time.sleep(2)
+    # Демонстрация коррекции
+    manual_correction_test()
     
-    # Запускаем тесты
-    success = test_ai_analysis()
-    test_with_real_photo()
+    # Тест разных уровней точности
+    test_different_accuracy_levels()
+    
+    # Инструмент калибровки
+    create_calibration_tool()
     
     print("\n" + "=" * 70)
-    if success:
-        print("🎉 ВСЁ РАБОТАЕТ! Система готова к использованию!")
-    else:
-        print("⚠️  Есть проблемы. Проверьте настройки.")
+    print("🎯 КЛЮЧЕВЫЕ ВЫВОДЫ:")
+    print("1. Текущая система может завышать количество в 2-3 раза")
+    print("2. Это нормально для компьютерного зрения без обучения")
+    print("3. Можно улучшить точность через калибровку")
+    print("4. Для production нужна обученная модель на реальных фото")
+    print("=" * 70)
     
-    print("\n📋 Что теперь можно делать:")
-    print("1. 📸 Загружать фото садов через Swagger")
-    print("2. 📊 Смотреть статистику в /api/v1/analytics/overview")
-    print("3. 🌳 Управлять садами и деревьями")
-    print("4. 📈 Строить графики урожайности")
-    
-    print("\n🔗 Ссылки:")
-    print("   Swagger UI: http://localhost:6000/docs")
-    print("   Главная: http://localhost:6000/")
+    print("\n🚀 ЧТО ДЕЛАТЬ ДАЛЬШЕ:")
+    print("1. Соберите реальные фото вашего сада")
+    print("2. Протестируйте на них систему")
+    print("3. Откалибруйте коэффициенты")
+    print("4. Или дообучите YOLO на ваших данных")
     print("=" * 70)

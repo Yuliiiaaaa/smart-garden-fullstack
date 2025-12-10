@@ -1,4 +1,4 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, status
+from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, status, Form
 from sqlalchemy.orm import Session
 from typing import List, Optional
 import os
@@ -178,3 +178,40 @@ async def demo_analysis():
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Ошибка демо: {str(e)}"
         )
+
+@router.post("/calibrate")
+async def calibrate_detector(
+    file: UploadFile = File(...),
+    expected_count: int = Form(...),
+    fruit_type: str = Form("apple"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Калибровка детектора для более точного подсчета"""
+    try:
+        # Проверяем файл
+        is_valid, error_msg = validate_image_file(file)
+        if not is_valid:
+            raise HTTPException(status_code=400, detail=error_msg)
+        
+        # Читаем файл
+        contents = await file.read()
+        
+        # Калибруем детектор
+        from app.services.ai_service import ai_service
+        calibration_factor = ai_service.calibrate_detector(contents, expected_count, fruit_type)
+        
+        # Анализируем с новыми настройками
+        result = ai_service.process_image(contents, fruit_type)
+        
+        return {
+            "calibration_success": True,
+            "expected_count": expected_count,
+            "detected_count": result['total_fruits'],
+            "calibration_factor": calibration_factor,
+            "message": f"Детектор откалиброван. Фактор: {calibration_factor:.3f}",
+            "new_result": result
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ошибка калибровки: {str(e)}")

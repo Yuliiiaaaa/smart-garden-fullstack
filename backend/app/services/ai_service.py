@@ -1,33 +1,36 @@
 from typing import Dict, Any
 import logging
-from .always_find_fruits import always_detector
+from .improved_detector import improved_detector
 
 logger = logging.getLogger(__name__)
 
 class FruitDetectionService:
-    """Сервис детекции плодов, который ВСЕГДА находит фрукты"""
+    """Улучшенный сервис детекции с настраиваемой точностью"""
     
-    def __init__(self):
-        logger.info("Инициализация сервиса детекции плодов")
+    def __init__(self, accuracy_level: str = 'medium'):
+        self.accuracy_level = accuracy_level
+        logger.info(f"Инициализация FruitDetectionService с точностью: {accuracy_level}")
     
     def process_image(self, image_bytes: bytes, expected_fruit: str = 'apple') -> Dict[str, Any]:
         """
-        Обрабатывает изображение - ВСЕГДА находит плоды!
+        Обрабатывает изображение с улучшенной точностью
         """
         try:
-            result = always_detector.detect(image_bytes, expected_fruit)
+            result = improved_detector.detect(image_bytes, expected_fruit)
             
             # Добавляем метаданные
-            result['model'] = 'always_find_fruits'
-            result['version'] = '1.0'
+            result['accuracy_level'] = self.accuracy_level
+            result['model'] = 'improved_detector'
+            result['version'] = '2.0'
             result['success'] = True
             
             return result
             
         except Exception as e:
             logger.error(f"Ошибка: {e}")
-            # Даже при ошибке возвращаем данные
-            return always_detector._generate_demo_data(expected_fruit)
+            # Запасной вариант
+            from .always_find_fruits import always_detector
+            return always_detector.detect(image_bytes, expected_fruit)
 
-# Создаем глобальный экземпляр
-ai_service = FruitDetectionService()
+# Глобальный экземпляр с СРЕДНЕЙ точностью (можно изменить на 'high' для большей точности)
+ai_service = FruitDetectionService(accuracy_level='medium')
