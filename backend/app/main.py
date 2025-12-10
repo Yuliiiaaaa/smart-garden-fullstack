@@ -1,8 +1,17 @@
 ﻿from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import HTTPBearer
+from fastapi.openapi.models import SecurityScheme
 from app.api.endpoints import health, auth, gardens, trees, analysis, analytics
 from app.middleware.auth_middleware import auth_middleware, role_middleware
 import uvicorn
+
+# Создаем security схему для Swagger
+security_scheme = HTTPBearer(
+    scheme_name="JWT",
+    bearerFormat="JWT",
+    description="Введите токен в формате: Bearer <ваш_токен>"
+)
 
 app = FastAPI(
     title="Smart Garden API",
@@ -17,7 +26,21 @@ app = FastAPI(
         {"name": "trees", "description": "Operations with trees"},
         {"name": "analysis", "description": "Photo analysis endpoints"},
         {"name": "analytics", "description": "Analytics endpoints"}
-    ]
+    ],
+    # Добавляем security схемы для Swagger
+    openapi_extra={
+        "components": {
+            "securitySchemes": {
+                "JWT": {
+                    "type": "http",
+                    "scheme": "bearer",
+                    "bearerFormat": "JWT",
+                    "description": "Введите JWT токен в формате: Bearer <token>"
+                }
+            }
+        },
+        "security": [{"JWT": []}]
+    }
 )
 
 # CORS middleware
@@ -54,7 +77,7 @@ async def api_status():
 if __name__ == "__main__":
     uvicorn.run(
         "app.main:app",
-        host="localhost",
+        host="0.0.0.0",
         port=8000,
         reload=True
     )

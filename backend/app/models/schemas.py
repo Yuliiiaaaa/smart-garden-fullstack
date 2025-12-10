@@ -101,3 +101,19 @@ class Token(BaseModel):
 class TokenData(BaseModel):
     email: Optional[str] = None
     role: Optional[str] = None  # Добавляем роль в TokenData
+
+# Схемы для анализа изображений
+class AnalysisResult(BaseModel):
+    fruit_count: int = Field(..., ge=0, description="Количество обнаруженных плодов")
+    confidence: float = Field(..., ge=0, le=1, description="Уверенность модели (0-1)")
+    processing_time: float = Field(..., gt=0, description="Время обработки в секундах")
+    detected_fruits: List[dict] = Field(default_factory=list, description="Список обнаруженных фруктов с деталями")
+    recommendations: str = Field(..., description="Рекомендации на основе анализа")
+    record_id: Optional[int] = Field(None, description="ID записи в базе данных")
+    method: str = Field(..., description="Метод анализа (yolo/color_detection)")
+    model: Optional[str] = Field(None, description="Используемая модель ИИ")
+
+# Схема для загрузки файла (для документации)
+class ImageUpload(BaseModel):
+    tree_id: Optional[int] = Field(None, description="ID дерева")
+    fruit_type: str = Field("apple", description="Ожидаемый тип плодов")

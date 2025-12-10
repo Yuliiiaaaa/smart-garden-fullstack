@@ -2,7 +2,12 @@ fastapi==0.104.1
 uvicorn==0.24.0
 pydantic==2.5.0
 python-multipart==0.0.6
-sqlalchemy==1.4.48
-databases==0.8.0
-python-jose==3.3.0
-
+sqlalchemy==1.4.49  # Используем совместимую версию
+python-jose[cryptography]==3.3.0
+opencv-python==4.8.1.78
+torch==2.1.0
+torchvision==0.16.0
+pillow==10.1.0
+numpy==1.24.3
+ultralytics==8.0.196
+databases==0.8.0  # Теперь совместима с SQLAlchemy 1.4
