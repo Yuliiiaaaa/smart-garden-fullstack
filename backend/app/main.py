@@ -1,9 +1,7 @@
 ﻿from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer
-from fastapi.openapi.models import SecurityScheme
-from .api.endpoints import health, auth, gardens, trees, analysis, analytics
-from app.middleware.auth_middleware import auth_middleware, role_middleware
+from app.api.endpoints import health, auth, gardens, trees, analysis, analytics
 import uvicorn
 
 # Создаем security схему для Swagger
@@ -27,7 +25,6 @@ app = FastAPI(
         {"name": "analysis", "description": "Photo analysis endpoints"},
         {"name": "analytics", "description": "Analytics endpoints"}
     ],
-    # Добавляем security схемы для Swagger
     openapi_extra={
         "components": {
             "securitySchemes": {
@@ -43,16 +40,18 @@ app = FastAPI(
     }
 )
 
-# CORS middleware
+# 1. ВАЖНО: CORS middleware ДОЛЖЕН быть ПЕРВЫМ
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["http://localhost:5173", "http://localhost:3000", "*"],  # Добавьте ваш фронтенд URL
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+    allow_headers=["*"],  # Разрешаем все заголовки, включая Authorization
+    expose_headers=["*"],
 )
 
-# Кастомные middleware для аутентификации и авторизации
+# 2. Затем кастомные middleware
+from app.middleware.auth_middleware import auth_middleware, role_middleware
 app.middleware("http")(auth_middleware)
 app.middleware("http")(role_middleware)
 
@@ -73,12 +72,18 @@ async def api_status():
     """Публичный эндпоинт для проверки статуса API"""
     return {"status": "API is running", "authenticated": False}
 
+
+# Добавьте обработчик OPTIONS для корневого пути
+@app.options("/{full_path:path}")
+async def options_handler(full_path: str):
+    """Обработчик OPTIONS запросов для всех путей"""
+    return {"message": "OK"}
+
 # Запуск сервера
 if __name__ == "__main__":
     uvicorn.run(
         "app.main:app",
-        host="localhost",
+        host="0.0.0.0",  # Изменено с localhost на 0.0.0.0
         port=8000,
-        reload=True,
-        workers=1
+        reload=True
     )

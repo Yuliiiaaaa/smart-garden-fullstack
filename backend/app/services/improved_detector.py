@@ -3,278 +3,596 @@ import numpy as np
 from PIL import Image
 import io
 from typing import Dict, Any, List, Tuple
-import random
-from datetime import datetime
 import logging
 import math
+import json
 
 logger = logging.getLogger(__name__)
 
+class NumpyEncoder(json.JSONEncoder):
+    """Кастомный JSON энкодер для numpy типов"""
+    def default(self, obj):
+        if isinstance(obj, (np.integer, np.floating)):
+            return obj.item()
+        elif isinstance(obj, np.ndarray):
+            return obj.tolist()
+        elif isinstance(obj, (np.bool_)):
+            return bool(obj)
+        return super().default(obj)
+
 class ImprovedFruitDetector:
-    """Улучшенный детектор фруктов с настраиваемой точностью"""
+    """Улучшенный детектор фруктов с мульти-методной детекцией"""
     
-    def __init__(self, accuracy_level: str = 'medium'):
+    def __init__(self, accuracy_level: str = 'high'):
         """
         accuracy_level: 
-        - 'low': демо-режим (всегда находит что-то)
-        - 'medium': цветовая детекция + коррекция
-        - 'high': пытается быть точным (для реальных фото)
+        - 'low': быстрая детекция (меньшая точность)
+        - 'medium': баланс скорости и точности
+        - 'high': максимальная точность (медленнее)
         """
         self.accuracy_level = accuracy_level
         self.fruit_colors = self._get_color_ranges()
         logger.info(f"Инициализирован ImprovedFruitDetector с уровнем точности: {accuracy_level}")
     
+    def _convert_numpy_types(self, obj):
+        """Рекурсивно преобразует numpy типы в нативные Python типы"""
+        if isinstance(obj, np.integer):
+            return int(obj)
+        elif isinstance(obj, np.floating):
+            return float(obj)
+        elif isinstance(obj, np.ndarray):
+            return obj.tolist()
+        elif isinstance(obj, np.bool_):
+            return bool(obj)
+        elif isinstance(obj, dict):
+            return {key: self._convert_numpy_types(value) for key, value in obj.items()}
+        elif isinstance(obj, (list, tuple)):
+            return [self._convert_numpy_types(item) for item in obj]
+        else:
+            return obj
+    
     def _get_color_ranges(self) -> Dict:
-        """Возвращает диапазоны цветов для разных фруктов"""
+        """Расширенные диапазоны цветов для разных фруктов"""
         return {
             'apple': {
-                'ranges': [
-                    (np.array([0, 50, 50]), np.array([10, 255, 255])),  # Красный
-                    (np.array([170, 50, 50]), np.array([180, 255, 255])),  # Красный (другой край)
+                'hsv_ranges': [
+                    # Красные яблоки (диапазон 1)
+                    (np.array([0, 100, 80]), np.array([10, 255, 255])),
+                    # Красные яблоки (диапазон 2 - другая сторона спектра)
+                    (np.array([170, 100, 80]), np.array([180, 255, 255])),
+                    # Зеленые яблоки
+                    (np.array([35, 40, 40]), np.array([85, 255, 200])),
                 ],
-                'min_size': 300,
-                'max_size': 5000,
-                'correction_factor': 0.7  # Коэффициент коррекции (реальных яблок меньше чем контуров)
+                'lab_ranges': [
+                    # Яблоки в LAB пространстве
+                    (np.array([20, 120, 120]), np.array([255, 150, 200])),
+                ],
+                'min_size': 200,     # Минимальный размер в пикселях
+                'max_size': 8000,    # Максимальный размер
+                'expected_size': 3000, # Ожидаемый средний размер
+                'shape_factor': 0.6, # Коэффициент круглости
             },
             'pear': {
-                'ranges': [
-                    (np.array([20, 50, 50]), np.array([40, 255, 255])),  # Желто-зеленый
+                'hsv_ranges': [
+                    # Желтые/зеленые груши
+                    (np.array([20, 40, 60]), np.array([45, 200, 220])),
                 ],
-                'min_size': 400,
-                'max_size': 6000,
-                'correction_factor': 0.6
+                'lab_ranges': [
+                    (np.array([50, 120, 140]), np.array([200, 140, 180])),
+                ],
+                'min_size': 300,
+                'max_size': 10000,
+                'expected_size': 4000,
+                'shape_factor': 0.5,  # Груши менее круглые
             },
             'cherry': {
-                'ranges': [
-                    (np.array([0, 100, 100]), np.array([10, 255, 255])),  # Ярко-красный
-                    (np.array([160, 100, 100]), np.array([180, 255, 255])),  # Темно-красный
+                'hsv_ranges': [
+                    # Вишни (темно-красные)
+                    (np.array([0, 120, 50]), np.array([10, 255, 180])),
+                    (np.array([170, 120, 50]), np.array([180, 255, 180])),
                 ],
-                'min_size': 100,
-                'max_size': 1000,
-                'correction_factor': 0.8
+                'lab_ranges': [
+                    (np.array([10, 140, 150]), np.array([60, 180, 200])),
+                ],
+                'min_size': 50,      # Вишни меньше
+                'max_size': 2000,
+                'expected_size': 800,
+                'shape_factor': 0.7,
+            },
+            'plum': {
+                'hsv_ranges': [
+                    # Сливы (фиолетовые/синие)
+                    (np.array([110, 40, 40]), np.array([140, 255, 200])),
+                ],
+                'lab_ranges': [
+                    (np.array([30, 130, 150]), np.array([80, 170, 200])),
+                ],
+                'min_size': 150,
+                'max_size': 5000,
+                'expected_size': 2000,
+                'shape_factor': 0.65,
             }
         }
     
-    def detect(self, image_bytes: bytes, expected_fruit: str = 'apple') -> Dict[str, Any]:
-        """
-        Улучшенная детекция с коррекцией результатов
-        """
-        try:
-            # Загружаем изображение
-            image = Image.open(io.BytesIO(image_bytes))
-            width, height = image.size
-            image_np = np.array(image)
+    def _preprocess_image(self, image_np: np.ndarray) -> np.ndarray:
+        """Предобработка изображения для улучшения детекции"""
+        # 1. Увеличиваем контраст
+        lab = cv2.cvtColor(image_np, cv2.COLOR_RGB2LAB)
+        l, a, b = cv2.split(lab)
+        
+        # Применяем CLAHE к L-каналу
+        clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8,8))
+        cl = clahe.apply(l)
+        
+        # Объединяем обратно
+        limg = cv2.merge([cl, a, b])
+        enhanced = cv2.cvtColor(limg, cv2.COLOR_LAB2RGB)
+        
+        # 2. Увеличиваем насыщенность (только для высокого уровня точности)
+        if self.accuracy_level == 'high':
+            hsv = cv2.cvtColor(enhanced, cv2.COLOR_RGB2HSV)
+            h, s, v = cv2.split(hsv)
+            s = cv2.add(s, 30)
+            v = cv2.add(v, 20)
+            enhanced = cv2.cvtColor(cv2.merge([h, s, v]), cv2.COLOR_HSV2RGB)
+        
+        # 3. Гауссово размытие для уменьшения шума
+        if self.accuracy_level != 'low':
+            enhanced = cv2.GaussianBlur(enhanced, (3, 3), 0)
+        
+        return enhanced
+    
+    def _detect_by_color(self, image: np.ndarray, fruit_type: str) -> np.ndarray:
+        """Детекция по цвету в нескольких цветовых пространствах"""
+        if fruit_type not in self.fruit_colors:
+            fruit_type = 'apple'
+        
+        color_info = self.fruit_colors[fruit_type]
+        combined_mask = np.zeros(image.shape[:2], dtype=np.uint8)
+        
+        # 1. Детекция в HSV пространстве
+        hsv = cv2.cvtColor(image, cv2.COLOR_RGB2HSV)
+        for lower, upper in color_info['hsv_ranges']:
+            mask = cv2.inRange(hsv, lower, upper)
+            combined_mask = cv2.bitwise_or(combined_mask, mask)
+        
+        # 2. Детекция в LAB пространстве (только для среднего и высокого уровней)
+        if self.accuracy_level in ['medium', 'high']:
+            lab = cv2.cvtColor(image, cv2.COLOR_RGB2LAB)
+            for lower, upper in color_info.get('lab_ranges', []):
+                mask = cv2.inRange(lab, lower, upper)
+                combined_mask = cv2.bitwise_or(combined_mask, mask)
+        
+        # Улучшение маски
+        kernel_size = 3 if self.accuracy_level == 'low' else 5
+        kernel = np.ones((kernel_size, kernel_size), np.uint8)
+        
+        # Морфологические операции для очистки маски
+        combined_mask = cv2.morphologyEx(combined_mask, cv2.MORPH_OPEN, kernel)
+        combined_mask = cv2.morphologyEx(combined_mask, cv2.MORPH_CLOSE, kernel)
+        
+        # Удаление мелких объектов
+        if self.accuracy_level != 'low':
+            # Находим все контуры
+            contours, _ = cv2.findContours(combined_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
             
-            # Преобразуем в HSV
-            hsv = cv2.cvtColor(image_np, cv2.COLOR_RGB2HSV)
+            # Создаем чистую маску
+            clean_mask = np.zeros_like(combined_mask)
             
-            # В зависимости от уровня точности
-            if self.accuracy_level == 'low':
-                return self._demo_mode(width, height, expected_fruit)
-            elif self.accuracy_level == 'medium':
-                return self._medium_accuracy(hsv, width, height, expected_fruit, image_np)
-            else:  # 'high'
-                return self._high_accuracy(hsv, width, height, expected_fruit, image_np)
+            for contour in contours:
+                area = cv2.contourArea(contour)
+                if area > color_info['min_size'] / 2:  # Более мягкий фильтр
+                    cv2.drawContours(clean_mask, [contour], -1, 255, -1)
+            
+            combined_mask = clean_mask
+        
+        return combined_mask
+    
+    def _detect_by_circles(self, image: np.ndarray, mask: np.ndarray, fruit_type: str) -> List[Dict]:
+        """Детекция круглых объектов (плодов)"""
+        if fruit_type not in self.fruit_colors:
+            fruit_type = 'apple'
+        
+        color_info = self.fruit_colors[fruit_type]
+        gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+        
+        # Применяем маску
+        gray_masked = cv2.bitwise_and(gray, gray, mask=mask)
+        
+        # Определяем параметры для HoughCircles в зависимости от фрукта
+        if fruit_type == 'cherry':
+            min_radius = 5
+            max_radius = 25
+            dp = 1.2
+        elif fruit_type == 'apple':
+            min_radius = 15
+            max_radius = 50
+            dp = 1.5
+        elif fruit_type == 'pear':
+            min_radius = 20
+            max_radius = 60
+            dp = 1.5
+        else:  # plum
+            min_radius = 10
+            max_radius = 40
+            dp = 1.3
+        
+        # Детекция кругов только для среднего и высокого уровней
+        if self.accuracy_level in ['medium', 'high']:
+            circles = cv2.HoughCircles(
+                gray_masked,
+                cv2.HOUGH_GRADIENT,
+                dp=dp,
+                minDist=min_radius * 2,
+                param1=50,
+                param2=30 if self.accuracy_level == 'high' else 25,
+                minRadius=min_radius,
+                maxRadius=max_radius
+            )
+        else:
+            circles = None
+        
+        detected_circles = []
+        if circles is not None:
+            circles = np.uint16(np.around(circles))
+            for circle in circles[0, :]:
+                x, y, r = circle
+                # Исправляем переполнение при вычитании
+                x_pos = max(0, int(x - r))
+                y_pos = max(0, int(y - r))
+                width = int(r * 2)
+                height = int(r * 2)
                 
-        except Exception as e:
-            logger.error(f"Ошибка детекции: {e}")
-            return self._demo_mode(800, 600, expected_fruit)
+                detected_circles.append({
+                    'x': x_pos,
+                    'y': y_pos,
+                    'width': width,
+                    'height': height,
+                    'radius': int(r),
+                    'center': (int(x), int(y))
+                })
+        
+        return detected_circles
     
-    def _demo_mode(self, width: int, height: int, fruit_type: str) -> Dict[str, Any]:
-        """Демо-режим: всегда находит что-то"""
-        fruit_count = random.randint(1, 5)
-        
-        boxes = []
-        for i in range(fruit_count):
-            boxes.append({
-                'x': random.randint(50, width - 100),
-                'y': random.randint(50, height - 100),
-                'width': random.randint(30, 50),
-                'height': random.randint(30, 50),
-                'area': random.randint(900, 2500)
-            })
-        
-        return {
-            'total_fruits': fruit_count,
-            'detected_fruits': [{
-                'fruit_type': fruit_type,
-                'count': fruit_count,
-                'boxes': boxes
-            }],
-            'method': 'demo',
-            'confidence': 0.5 + random.random() * 0.3,
-            'recommendations': self._generate_recommendations(fruit_count, fruit_type, 'demo')
-        }
-    
-    def _medium_accuracy(self, hsv: np.ndarray, width: int, height: int, 
-                        fruit_type: str, original_image: np.ndarray) -> Dict[str, Any]:
-        """Средняя точность: цветовая детекция с коррекцией"""
-        
+    def _detect_by_contours(self, mask: np.ndarray, fruit_type: str) -> List[Dict]:
+        """Детекция по контурам с фильтрацией по форме"""
         if fruit_type not in self.fruit_colors:
             fruit_type = 'apple'
         
         color_info = self.fruit_colors[fruit_type]
         
-        # Объединяем все маски для этого фрукта
-        combined_mask = np.zeros(hsv.shape[:2], dtype=np.uint8)
-        
-        for lower, upper in color_info['ranges']:
-            mask = cv2.inRange(hsv, lower, upper)
-            combined_mask = cv2.bitwise_or(combined_mask, mask)
-        
-        # Улучшаем маску
-        kernel = np.ones((3,3), np.uint8)
-        combined_mask = cv2.morphologyEx(combined_mask, cv2.MORPH_OPEN, kernel)
-        combined_mask = cv2.morphologyEx(combined_mask, cv2.MORPH_CLOSE, kernel)
-        
         # Находим контуры
-        contours, _ = cv2.findContours(combined_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         
-        # Фильтруем по размеру
-        valid_contours = []
+        detected_contours = []
         for contour in contours:
             area = cv2.contourArea(contour)
-            if color_info['min_size'] < area < color_info['max_size']:
-                # Проверяем круглость
-                perimeter = cv2.arcLength(contour, True)
-                if perimeter > 0:
-                    circularity = 4 * np.pi * area / (perimeter * perimeter)
-                    if 0.6 < circularity < 1.4:  # Довольно круглый
-                        valid_contours.append(contour)
-        
-        # ПРИМЕНЯЕМ КОРРЕКЦИЮ!
-        raw_count = len(valid_contours)
-        corrected_count = int(raw_count * color_info['correction_factor'])
-        
-        # Гарантируем что найдем хоть что-то
-        if corrected_count == 0 and raw_count > 0:
-            corrected_count = 1
-        elif corrected_count == 0:
-            corrected_count = random.randint(1, 3)  # Демо-режим если совсем ничего
-        
-        # Создаем bounding boxes
-        boxes = []
-        for i, contour in enumerate(valid_contours[:corrected_count]):  # Берем только скорректированное количество
+            
+            # Фильтрация по размеру
+            if area < color_info['min_size'] or area > color_info['max_size']:
+                continue
+            
+            # Вычисляем параметры формы
+            perimeter = cv2.arcLength(contour, True)
+            if perimeter == 0:
+                continue
+            
+            # Круглость
+            circularity = 4 * np.pi * area / (perimeter * perimeter)
+            
+            # Соотношение сторон bounding box
             x, y, w, h = cv2.boundingRect(contour)
-            boxes.append({
-                'x': int(x),
-                'y': int(y),
-                'width': int(w),
-                'height': int(h),
-                'area': float(cv2.contourArea(contour))
+            aspect_ratio = float(w) / h if h > 0 else 1
+            
+            # Фильтрация по форме (зависит от типа фрукта)
+            min_circularity = color_info['shape_factor'] - 0.2
+            max_circularity = color_info['shape_factor'] + 0.4
+            
+            if min_circularity < circularity < max_circularity and 0.5 < aspect_ratio < 2.0:
+                detected_contours.append({
+                    'x': int(x),
+                    'y': int(y),
+                    'width': int(w),
+                    'height': int(h),
+                    'area': float(area),
+                    'circularity': float(circularity)
+                })
+        
+        return detected_contours
+    
+    def _merge_detections(self, circles: List[Dict], contours: List[Dict]) -> List[Dict]:
+        """Объединение дублирующихся детекций"""
+        all_detections = []
+        
+        # Преобразуем круги в формат bounding boxes
+        circle_boxes = []
+        for circle in circles:
+            circle_boxes.append({
+                'x': circle['x'],
+                'y': circle['y'],
+                'width': circle['width'],
+                'height': circle['height'],
+                'type': 'circle',
+                'data': circle
             })
         
-        # Рассчитываем уверенность
-        confidence = 0.6  # Базовая
-        if raw_count > 0:
-            confidence = min(0.7 + (corrected_count * 0.02), 0.85)
+        # Преобразуем контуры в формат bounding boxes
+        contour_boxes = []
+        for contour in contours:
+            contour_boxes.append({
+                'x': contour['x'],
+                'y': contour['y'],
+                'width': contour['width'],
+                'height': contour['height'],
+                'type': 'contour',
+                'data': contour
+            })
         
-        return {
-            'total_fruits': corrected_count,
-            'detected_fruits': [{
-                'fruit_type': fruit_type,
-                'count': corrected_count,
-                'boxes': boxes,
-                'raw_count': raw_count,  # Для отладки
-                'correction_factor': color_info['correction_factor']
-            }],
-            'method': 'color_detection_corrected',
-            'confidence': confidence,
-            'recommendations': self._generate_recommendations(corrected_count, fruit_type, 'medium'),
-            'debug_info': {
-                'raw_detections': raw_count,
-                'corrected': corrected_count,
-                'correction_factor': color_info['correction_factor']
-            }
-        }
-    
-    def _high_accuracy(self, hsv: np.ndarray, width: int, height: int, 
-                      fruit_type: str, original_image: np.ndarray) -> Dict[str, Any]:
-        """Высокая точность: дополнительные проверки"""
+        # Объединяем все детекции
+        all_boxes = circle_boxes + contour_boxes
         
-        # Сначала получаем результат средней точности
-        result = self._medium_accuracy(hsv, width, height, fruit_type, original_image)
+        # Удаляем дубликаты (близко расположенные bounding boxes)
+        merged_boxes = []
+        used = [False] * len(all_boxes)
         
-        # Дополнительные улучшения для высокой точности
-        detected_count = result['total_fruits']
-        
-        # 1. Проверка распределения плодов (настоящие плоды обычно не в кучке)
-        if 'detected_fruits' in result and result['detected_fruits']:
-            boxes = result['detected_fruits'][0].get('boxes', [])
-            if len(boxes) > 1:
-                # Проверяем среднее расстояние между плодами
-                distances = []
-                for i in range(len(boxes)):
-                    for j in range(i+1, len(boxes)):
-                        # Центры bounding boxes
-                        cx1 = boxes[i]['x'] + boxes[i]['width'] / 2
-                        cy1 = boxes[i]['y'] + boxes[i]['height'] / 2
-                        cx2 = boxes[j]['x'] + boxes[j]['width'] / 2
-                        cy2 = boxes[j]['y'] + boxes[j]['height'] / 2
-                        
-                        distance = math.sqrt((cx2 - cx1)**2 + (cy2 - cy1)**2)
-                        distances.append(distance)
+        for i, box1 in enumerate(all_boxes):
+            if used[i]:
+                continue
+            
+            # Находим центр первого бокса
+            cx1 = box1['x'] + box1['width'] / 2
+            cy1 = box1['y'] + box1['height'] / 2
+            
+            # Ищем перекрывающиеся боксы
+            merged_box = box1.copy()
+            count = 1
+            
+            for j in range(i + 1, len(all_boxes)):
+                if used[j]:
+                    continue
                 
-                if distances:
-                    avg_distance = sum(distances) / len(distances)
-                    # Если плоды слишком близко - возможно это один плод
-                    if avg_distance < 50 and detected_count > 3:
-                        # Уменьшаем количество
-                        reduction = max(1, detected_count // 2)
-                        result['total_fruits'] = reduction
-                        result['detected_fruits'][0]['count'] = reduction
-                        result['confidence'] *= 0.8  # Снижаем уверенность
+                box2 = all_boxes[j]
+                cx2 = box2['x'] + box2['width'] / 2
+                cy2 = box2['y'] + box2['height'] / 2
+                
+                # Расстояние между центрами
+                distance = math.sqrt((cx2 - cx1)**2 + (cy2 - cy1)**2)
+                
+                # Если боксы близко (перекрываются), объединяем
+                max_dimension = max(box1['width'], box1['height'], box2['width'], box2['height'])
+                if distance < max_dimension * 0.7:
+                    # Объединяем координаты (взвешенное среднее)
+                    merged_box['x'] = (merged_box['x'] * count + box2['x']) / (count + 1)
+                    merged_box['y'] = (merged_box['y'] * count + box2['y']) / (count + 1)
+                    merged_box['width'] = (merged_box['width'] * count + box2['width']) / (count + 1)
+                    merged_box['height'] = (merged_box['height'] * count + box2['height']) / (count + 1)
+                    used[j] = True
+                    count += 1
+            
+            merged_boxes.append(merged_box)
+            used[i] = True
         
-        # 2. Корректировка на основе размера изображения
-        image_area = width * height
-        fruit_density = detected_count / (image_area / 10000)  # плодов на 10000 пикселей
-        
-        # Слишком высокая плотность - уменьшаем количество
-        if fruit_density > 10 and detected_count > 10:
-            reduction = int(detected_count * 0.7)  # Уменьшаем на 30%
-            result['total_fruits'] = max(1, reduction)
-            result['detected_fruits'][0]['count'] = result['total_fruits']
-            result['confidence'] = min(result['confidence'] * 0.9, 0.8)
-        
-        # 3. Обновляем метод
-        result['method'] = 'high_accuracy'
-        result['recommendations'] = self._generate_recommendations(
-            result['total_fruits'], fruit_type, 'high'
-        )
+        # Конвертируем обратно в формат результата
+        result = []
+        for box in merged_boxes:
+            result.append({
+                'x': int(box['x']),
+                'y': int(box['y']),
+                'width': int(box['width']),
+                'height': int(box['height']),
+                'area': float(box['width'] * box['height'])
+            })
         
         return result
     
-    def _generate_recommendations(self, count: int, fruit_type: str, mode: str) -> str:
-        """Генерирует рекомендации с учетом точности"""
+    def _calculate_confidence(self, detections: List[Dict], image_area: int, fruit_type: str) -> float:
+        """Расчет уверенности в результатах"""
+        if fruit_type not in self.fruit_colors:
+            fruit_type = 'apple'
+        
+        color_info = self.fruit_colors[fruit_type]
+        
+        if not detections:
+            return 0.3  # Низкая уверенность если ничего не найдено
+        
+        # 1. Уверенность на основе количества обнаружений
+        count_confidence = min(len(detections) / 10, 1.0) * 0.3
+        
+        # 2. Уверенность на основе размера объектов
+        size_confidence = 0.0
+        total_area = 0
+        
+        for det in detections:
+            area = det['area']
+            total_area += area
+            
+            # Проверяем соответствие ожидаемому размеру
+            size_diff = abs(area - color_info['expected_size']) / color_info['expected_size']
+            if size_diff < 0.5:  # В пределах 50% от ожидаемого
+                size_confidence += 0.1
+        
+        size_confidence = min(size_confidence / len(detections), 0.3)
+        
+        # 3. Уверенность на основе распределения объектов
+        distribution_confidence = 0.0
+        if len(detections) > 1:
+            # Проверяем что объекты не все в одном месте
+            centers = []
+            for det in detections:
+                centers.append((det['x'] + det['width']/2, det['y'] + det['height']/2))
+            
+            # Вычисляем среднее расстояние между центрами
+            total_distance = 0
+            count = 0
+            for i in range(len(centers)):
+                for j in range(i+1, len(centers)):
+                    dx = centers[i][0] - centers[j][0]
+                    dy = centers[i][1] - centers[j][1]
+                    total_distance += math.sqrt(dx*dx + dy*dy)
+                    count += 1
+            
+            if count > 0:
+                avg_distance = total_distance / count
+                # Нормализуем по размеру изображения
+                img_diagonal = math.sqrt(image_area)
+                if avg_distance > img_diagonal * 0.05:  # Объекты достаточно разнесены
+                    distribution_confidence = 0.2
+        
+        # 4. Базовый уровень уверенности в зависимости от accuracy_level
+        base_confidence = {'low': 0.5, 'medium': 0.7, 'high': 0.8}[self.accuracy_level]
+        
+        # Итоговая уверенность
+        confidence = base_confidence + count_confidence + size_confidence + distribution_confidence
+        return min(confidence, 0.95)  # Максимум 95%
+    
+    def detect(self, image_bytes: bytes, expected_fruit: str = 'apple') -> Dict[str, Any]:
+        """
+        Основной метод детекции с несколькими алгоритмами
+        """
+        try:
+            # Загружаем и декодируем изображение
+            image_pil = Image.open(io.BytesIO(image_bytes))
+            
+            # Конвертируем в RGB если нужно (для JPEG)
+            if image_pil.mode != 'RGB':
+                image_pil = image_pil.convert('RGB')
+            
+            image_np = np.array(image_pil)
+            height, width = image_np.shape[:2]
+            image_area = width * height
+            
+            # Предобработка изображения
+            processed_image = self._preprocess_image(image_np)
+            
+            # Детекция по цвету
+            color_mask = self._detect_by_color(processed_image, expected_fruit)
+            
+            # Детекция кругов (для круглых фруктов)
+            circles = self._detect_by_circles(processed_image, color_mask, expected_fruit)
+            
+            # Детекция по контурам
+            contours = self._detect_by_contours(color_mask, expected_fruit)
+            
+            # Объединение результатов
+            all_detections = self._merge_detections(circles, contours)
+            
+            # Если ничего не найдено, пробуем альтернативные методы
+            if not all_detections and self.accuracy_level in ['medium', 'high']:
+                # Пробуем найти контуры на оригинальном изображении
+                gray = cv2.cvtColor(image_np, cv2.COLOR_RGB2GRAY)
+                blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+                
+                # Адаптивный порог
+                thresh = cv2.adaptiveThreshold(
+                    blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+                    cv2.THRESH_BINARY_INV, 11, 2
+                )
+                
+                # Находим контуры
+                alt_contours, _ = cv2.findContours(
+                    thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+                )
+                
+                # Фильтруем по размеру
+                for contour in alt_contours:
+                    area = cv2.contourArea(contour)
+                    if 200 < area < 5000:  # Базовые размеры плодов
+                        x, y, w, h = cv2.boundingRect(contour)
+                        all_detections.append({
+                            'x': int(x),
+                            'y': int(y),
+                            'width': int(w),
+                            'height': int(h),
+                            'area': float(area)
+                        })
+            
+            # Рассчитываем уверенность
+            confidence = self._calculate_confidence(all_detections, image_area, expected_fruit)
+            
+            # Формируем результат
+            result = {
+                'total_fruits': len(all_detections),
+                'detected_fruits': [{
+                    'fruit_type': expected_fruit,
+                    'count': len(all_detections),
+                    'boxes': all_detections,
+                    'sizes': [d['area'] for d in all_detections] if all_detections else []
+                }],
+                'method': 'multi_method',
+                'model': 'improved_detector_v2',
+                'accuracy_level': self.accuracy_level,
+                'confidence': float(confidence),  # Явное преобразование в float
+                'image_size': f"{width}x{height}",
+                'timestamp': self._get_timestamp(),
+                'recommendations': self._generate_recommendations(len(all_detections), expected_fruit),
+            }
+            
+            # Добавляем отладочную информацию для высокого уровня
+            if self.accuracy_level == 'high':
+                result['debug_info'] = {
+                    'circles_found': len(circles),
+                    'contours_found': len(contours),
+                    'merged_count': len(all_detections),
+                    'image_area': int(image_area),  # Преобразуем в int
+                }
+            
+            # Преобразуем все numpy типы в нативные Python типы
+            result = self._convert_numpy_types(result)
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Ошибка детекции: {e}")
+            # Возвращаем минимальный результат вместо демо-данных
+            return self._convert_numpy_types({
+                'total_fruits': 0,
+                'detected_fruits': [],
+                'method': 'error_fallback',
+                'model': 'improved_detector_v2',
+                'accuracy_level': self.accuracy_level,
+                'confidence': 0.1,
+                'error': str(e),
+                'recommendations': 'Ошибка обработки изображения. Попробуйте другое фото.',
+            })
+    
+    def _get_timestamp(self) -> str:
+        """Получение временной метки"""
+        from datetime import datetime
+        return datetime.now().isoformat()
+    
+    def _generate_recommendations(self, count: int, fruit_type: str) -> str:
+        """Генерация рекомендаций на основе результатов"""
         recommendations = []
         
-        if mode == 'demo':
-            recommendations.append(f"Демо-режим: обнаружено {count} плодов.")
-        elif mode == 'medium':
-            recommendations.append(f"Цветовая детекция: {count} плодов.")
-        else:
-            recommendations.append(f"Точный анализ: {count} плодов.")
-        
-        # Реальные рекомендации
         if count == 0:
-            recommendations.append("Плоды не обнаружены. Попробуйте другое фото.")
-        elif count < 5:
-            recommendations.append("Низкая урожайность. Проверьте уход за деревом.")
-        elif count < 15:
-            recommendations.append(f"Средняя урожайность ({count} плодов).")
-        elif count < 30:
-            recommendations.append(f"Хорошая урожайность ({count} плодов)!")
+            recommendations.append("Плоды не обнаружены. Попробуйте:")
+            recommendations.append("- Сфотографировать при лучшем освещении")
+            recommendations.append("- Убедиться что плоды в кадре")
+            recommendations.append("- Попробовать другой ракурс")
+        elif count < 3:
+            recommendations.append(f"Обнаружено мало плодов ({count} шт).")
+            recommendations.append("Рекомендуется проверить состояние дерева.")
+        elif count < 10:
+            recommendations.append(f"Средняя урожайность: {count} плодов.")
+            recommendations.append("Дерево в нормальном состоянии.")
+        elif count < 20:
+            recommendations.append(f"Хорошая урожайность: {count} плодов!")
+            recommendations.append("Рекомендуется сбор через 1-2 недели.")
         else:
-            recommendations.append(f"Отличная урожайность! {count} плодов.")
+            recommendations.append(f"Отличная урожайность: {count} плодов!")
+            recommendations.append("Рекомендуется сбор на этой неделе.")
         
-        # В зависимости от типа
+        # Добавляем рекомендации по типу фрукта
         if fruit_type == 'apple':
-            if count > 20:
-                recommendations.append("Яблок много, возможно нужно прореживание.")
+            recommendations.append("Яблоки: оптимальный сбор при полном окрасе.")
         elif fruit_type == 'pear':
-            recommendations.append("Груши: проверьте на предмет парши.")
+            recommendations.append("Груши: собирайте когда плодоножка легко отделяется.")
+        elif fruit_type == 'cherry':
+            recommendations.append("Вишни: собирайте полностью окрашенные плоды.")
+        elif fruit_type == 'plum':
+            recommendations.append("Сливы: спелые при легком нажатии.")
         
         return " ".join(recommendations)
 
-# Глобальный экземпляр с настраиваемой точностью
-improved_detector = ImprovedFruitDetector(accuracy_level='medium')
+# Глобальный экземпляр с ВЫСОКОЙ точностью
+improved_detector = ImprovedFruitDetector(accuracy_level='high')
