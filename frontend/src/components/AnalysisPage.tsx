@@ -1,30 +1,112 @@
-import { useState } from 'react';
+// src/components/AnalysisPage.tsx (обновленный)
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Upload, Info } from 'lucide-react';
+import { Upload, Info, Loader2 } from 'lucide-react';
 import { Header } from './Header';
 import { Button } from './ui/button';
 import { Card, CardContent } from './ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Label } from './ui/label';
+import { analysisService } from '../services/analysisService';
+import { gardenService } from '../services/gardenService';
+import { useApiRequest } from '../hooks/useApiRequest';
+import { AnalysisResult } from '../services/apiConfig';
+
+interface Garden {
+  id: number;
+  name: string;
+  fruit_type: string;
+}
 
 export function AnalysisPage() {
   const navigate = useNavigate();
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [selectedFruitType, setSelectedFruitType] = useState('apple');
+  const [selectedScale, setSelectedScale] = useState('single');
+  const [selectedGarden, setSelectedGarden] = useState<string>('');
+  const [selectedTree, setSelectedTree] = useState('auto');
+  const [gardens, setGardens] = useState<Garden[]>([]);
+  const [previewUrl, setPreviewUrl] = useState<string>('');
   
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      setSelectedFile(e.target.files[0]);
+  const analysisRequest = useApiRequest<AnalysisResult>();
+  const gardensRequest = useApiRequest<Garden[]>();
+  
+  // Загрузка садов при монтировании
+  useEffect(() => {
+    loadGardens();
+  }, []);
+  
+  // Создание preview при выборе файла
+  useEffect(() => {
+    if (!selectedFile) {
+      setPreviewUrl('');
+      return;
+    }
+    
+    const objectUrl = URL.createObjectURL(selectedFile);
+    setPreviewUrl(objectUrl);
+    
+    return () => URL.revokeObjectURL(objectUrl);
+  }, [selectedFile]);
+  
+  const loadGardens = async () => {
+    try {
+      const data = await gardensRequest.execute(() => 
+        gardenService.getAllGardens()
+      );
+      setGardens(data);
+      if (data.length > 0) {
+        setSelectedGarden(data[0].id.toString());
+      }
+    } catch (error) {
+      console.error('Ошибка загрузки садов:', error);
     }
   };
   
-  const handleAnalysis = () => {
-    setIsAnalyzing(true);
-    // Simulate AI analysis
-    setTimeout(() => {
-      navigate('/results');
-    }, 3000);
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      
+      // Проверка размера файла (макс 10MB)
+      if (file.size > 10 * 1024 * 1024) {
+        alert('Файл слишком большой. Максимальный размер: 10MB');
+        return;
+      }
+      
+      // Проверка типа файла
+      if (!file.type.match('image/jpeg') && !file.type.match('image/png')) {
+        alert('Пожалуйста, загрузите изображение в формате JPG или PNG');
+        return;
+      }
+      
+      setSelectedFile(file);
+    }
   };
+  
+  const handleAnalysis = async () => {
+    if (!selectedFile) {
+      alert('Пожалуйста, выберите файл для анализа');
+      return;
+    }
+    
+    try {
+      const result = await analysisRequest.execute(() =>
+        analysisService.analyzePhoto({
+          file: selectedFile,
+          fruit_type: selectedFruitType,
+          tree_id: selectedTree !== 'auto' ? parseInt(selectedTree) : undefined,
+          garden_id: selectedGarden ? parseInt(selectedGarden) : undefined,
+        })
+      );
+      
+      // Переходим на страницу результатов с данными
+      navigate('/results', { state: { analysisResult: result } });
+    } catch (error) {
+      console.error('Ошибка анализа:', error);
+    }
+  };
+  
+  const isLoading = analysisRequest.loading || gardensRequest.loading;
   
   return (
     <div className="min-h-screen bg-background">
@@ -36,6 +118,11 @@ export function AnalysisPage() {
             <span className="text-2xl">📸</span>
             АНАЛИЗ УРОЖАЯ
           </h1>
+          {analysisRequest.error && (
+            <div className="p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg mt-2">
+              {analysisRequest.error}
+            </div>
+          )}
         </div>
         
         {/* File Upload Area */}
@@ -47,16 +134,33 @@ export function AnalysisPage() {
                 accept="image/jpeg,image/png"
                 onChange={handleFileChange}
                 className="hidden"
-                disabled={isAnalyzing}
+                disabled={isLoading}
               />
-              <div className="border-2 border-dashed border-border rounded-lg p-16 text-center cursor-pointer hover:border-primary transition-colors">
-                <Upload className="size-16 mx-auto mb-4 text-muted-foreground" />
+              <div className={`border-2 ${selectedFile ? 'border-primary' : 'border-dashed border-border'} rounded-lg p-8 text-center cursor-pointer hover:border-primary transition-colors ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                {previewUrl ? (
+                  <div className="mb-4">
+                    <img 
+                      src={previewUrl} 
+                      alt="Preview" 
+                      className="max-h-64 mx-auto rounded-lg object-contain"
+                    />
+                  </div>
+                ) : (
+                  <Upload className="size-16 mx-auto mb-4 text-muted-foreground" />
+                )}
                 <p className="text-xl mb-2">
-                  {selectedFile ? selectedFile.name : 'Перетащите фото или нажмите для выбора'}
+                  {selectedFile 
+                    ? selectedFile.name 
+                    : 'Нажмите для выбора фотографии'}
                 </p>
                 <p className="text-muted-foreground">
                   Форматы: JPG, PNG, до 10MB
                 </p>
+                {selectedFile && (
+                  <p className="text-sm text-muted-foreground mt-2">
+                    Размер: {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
+                  </p>
+                )}
               </div>
             </label>
           </CardContent>
@@ -76,15 +180,19 @@ export function AnalysisPage() {
                   <span className="text-xl">🍎</span>
                   Тип плодов:
                 </Label>
-                <Select defaultValue="apples">
+                <Select 
+                  value={selectedFruitType} 
+                  onValueChange={setSelectedFruitType}
+                  disabled={isLoading}
+                >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="apples">Яблоки</SelectItem>
-                    <SelectItem value="pears">Груши</SelectItem>
-                    <SelectItem value="cherries">Вишни</SelectItem>
-                    <SelectItem value="plums">Сливы</SelectItem>
+                    <SelectItem value="apple">Яблоки</SelectItem>
+                    <SelectItem value="pear">Груши</SelectItem>
+                    <SelectItem value="cherry">Вишни</SelectItem>
+                    <SelectItem value="plum">Сливы</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -94,7 +202,11 @@ export function AnalysisPage() {
                   <span className="text-xl">🌳</span>
                   Масштаб:
                 </Label>
-                <Select defaultValue="single">
+                <Select 
+                  value={selectedScale} 
+                  onValueChange={setSelectedScale}
+                  disabled={isLoading}
+                >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -111,14 +223,30 @@ export function AnalysisPage() {
                   <span className="text-xl">📍</span>
                   Сад:
                 </Label>
-                <Select defaultValue="apple">
+                <Select 
+                  value={selectedGarden} 
+                  onValueChange={setSelectedGarden}
+                  disabled={isLoading || gardensRequest.loading}
+                >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="apple">Яблоневый сад</SelectItem>
-                    <SelectItem value="pear">Грушевый сад</SelectItem>
-                    <SelectItem value="cherry">Вишневый сад</SelectItem>
+                    {gardensRequest.loading ? (
+                      <SelectItem value="loading" disabled>
+                        Загрузка садов...
+                      </SelectItem>
+                    ) : gardens.length === 0 ? (
+                      <SelectItem value="none" disabled>
+                        Нет доступных садов
+                      </SelectItem>
+                    ) : (
+                      gardens.map((garden) => (
+                        <SelectItem key={garden.id} value={garden.id.toString()}>
+                          {garden.name}
+                        </SelectItem>
+                      ))
+                    )}
                   </SelectContent>
                 </Select>
               </div>
@@ -128,15 +256,19 @@ export function AnalysisPage() {
                   <span className="text-xl">🏷</span>
                   Дерево:
                 </Label>
-                <Select defaultValue="auto">
+                <Select 
+                  value={selectedTree} 
+                  onValueChange={setSelectedTree}
+                  disabled={isLoading}
+                >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="auto">Авто-определение</SelectItem>
-                    <SelectItem value="tree15">Дерево #15</SelectItem>
-                    <SelectItem value="tree45">Дерево #45</SelectItem>
-                    <SelectItem value="tree78">Дерево #78</SelectItem>
+                    <SelectItem value="15">Дерево #15</SelectItem>
+                    <SelectItem value="45">Дерево #45</SelectItem>
+                    <SelectItem value="78">Дерево #78</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -149,11 +281,24 @@ export function AnalysisPage() {
           <Button 
             size="lg" 
             onClick={handleAnalysis}
-            disabled={!selectedFile || isAnalyzing}
-            className="px-12"
+            disabled={!selectedFile || isLoading}
+            className="px-12 min-w-[200px]"
           >
-            {isAnalyzing ? 'АНАЛИЗ...' : '🔍 НАЧАТЬ АНАЛИЗ'}
+            {analysisRequest.loading ? (
+              <>
+                <Loader2 className="mr-2 size-5 animate-spin" />
+                АНАЛИЗ...
+              </>
+            ) : (
+              '🔍 НАЧАТЬ АНАЛИЗ'
+            )}
           </Button>
+          
+          {analysisRequest.loading && (
+            <p className="text-muted-foreground mt-2">
+              Обработка изображения... Это может занять несколько секунд
+            </p>
+          )}
         </div>
         
         {/* Tips */}

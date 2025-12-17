@@ -1,3 +1,4 @@
+// src/components/AuthPage.tsx (обновленный)
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Leaf } from 'lucide-react';
@@ -6,26 +7,74 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
+import { authService } from '../services/authService';
+import { setAuthToken } from '../services/apiConfig';
+import { useApiRequest } from '../hooks/useApiRequest';
 
 export function AuthPage() {
   const navigate = useNavigate();
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
-  const [registerUsername, setRegisterUsername] = useState('');
+  const [registerFullName, setRegisterFullName] = useState('');
   const [registerEmail, setRegisterEmail] = useState('');
   const [registerPassword, setRegisterPassword] = useState('');
+  const [registerConfirmPassword, setRegisterConfirmPassword] = useState('');
   
-  const handleLogin = (e: React.FormEvent) => {
+  const loginRequest = useApiRequest<any>();
+  const registerRequest = useApiRequest<any>();
+  
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Simulate login
-    navigate('/dashboard');
+    
+    if (!loginEmail || !loginPassword) {
+      loginRequest.execute(() => Promise.reject(new Error('Заполните все поля')));
+      return;
+    }
+    
+    try {
+      const result = await loginRequest.execute(() => 
+        authService.login(loginEmail, loginPassword)
+      );
+      
+      setAuthToken(result.access_token);
+      // Сохраняем пользователя в localStorage или состоянии
+      localStorage.setItem('user', JSON.stringify(result.user));
+      navigate('/dashboard');
+    } catch (error) {
+      // Ошибка уже обработана в useApiRequest
+    }
   };
   
-  const handleRegister = (e: React.FormEvent) => {
+  const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Simulate registration
-    navigate('/dashboard');
+    
+    if (!registerFullName || !registerEmail || !registerPassword) {
+      registerRequest.execute(() => Promise.reject(new Error('Заполните все обязательные поля')));
+      return;
+    }
+    
+    if (registerPassword !== registerConfirmPassword) {
+      registerRequest.execute(() => Promise.reject(new Error('Пароли не совпадают')));
+      return;
+    }
+    
+    try {
+      const user = await registerRequest.execute(() =>
+        authService.register(registerEmail, registerPassword, registerFullName)
+      );
+      
+      // После регистрации автоматически логинимся
+      const loginResult = await authService.login(registerEmail, registerPassword);
+      setAuthToken(loginResult.access_token);
+      localStorage.setItem('user', JSON.stringify(loginResult.user));
+      navigate('/dashboard');
+    } catch (error) {
+      // Ошибка уже обработана в useApiRequest
+    }
   };
+  
+  const isLoading = loginRequest.loading || registerRequest.loading;
+  const error = loginRequest.error || registerRequest.error;
   
   return (
     <div className="min-h-screen bg-gradient-to-br from-secondary/20 via-background to-primary/10 flex items-center justify-center p-6">
@@ -36,6 +85,13 @@ export function AuthPage() {
           </div>
           <span className="text-2xl text-primary">Умный Сад</span>
         </Link>
+        
+        {/* Отображение ошибок */}
+        {error && (
+          <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg">
+            {error}
+          </div>
+        )}
         
         <Tabs defaultValue="login" className="w-full">
           <TabsList className="grid w-full grid-cols-2">
@@ -62,6 +118,7 @@ export function AuthPage() {
                       value={loginEmail}
                       onChange={(e) => setLoginEmail(e.target.value)}
                       required
+                      disabled={isLoading}
                     />
                   </div>
                   
@@ -74,11 +131,16 @@ export function AuthPage() {
                       value={loginPassword}
                       onChange={(e) => setLoginPassword(e.target.value)}
                       required
+                      disabled={isLoading}
                     />
                   </div>
                   
-                  <Button type="submit" className="w-full">
-                    Войти
+                  <Button 
+                    type="submit" 
+                    className="w-full"
+                    disabled={isLoading}
+                  >
+                    {loginRequest.loading ? 'Вход...' : 'Войти'}
                   </Button>
                 </form>
               </CardContent>
@@ -96,14 +158,15 @@ export function AuthPage() {
               <CardContent>
                 <form onSubmit={handleRegister} className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="register-username">Логин</Label>
+                    <Label htmlFor="register-fullname">ФИО</Label>
                     <Input
-                      id="register-username"
+                      id="register-fullname"
                       type="text"
-                      placeholder="Введите логин"
-                      value={registerUsername}
-                      onChange={(e) => setRegisterUsername(e.target.value)}
+                      placeholder="Иванов Иван Иванович"
+                      value={registerFullName}
+                      onChange={(e) => setRegisterFullName(e.target.value)}
                       required
+                      disabled={isLoading}
                     />
                   </div>
                   
@@ -116,6 +179,7 @@ export function AuthPage() {
                       value={registerEmail}
                       onChange={(e) => setRegisterEmail(e.target.value)}
                       required
+                      disabled={isLoading}
                     />
                   </div>
                   
@@ -128,6 +192,7 @@ export function AuthPage() {
                       value={registerPassword}
                       onChange={(e) => setRegisterPassword(e.target.value)}
                       required
+                      disabled={isLoading}
                     />
                   </div>
                   
@@ -137,12 +202,19 @@ export function AuthPage() {
                       id="register-password-confirm"
                       type="password"
                       placeholder="••••••••"
+                      value={registerConfirmPassword}
+                      onChange={(e) => setRegisterConfirmPassword(e.target.value)}
                       required
+                      disabled={isLoading}
                     />
                   </div>
                   
-                  <Button type="submit" className="w-full">
-                    Зарегистрироваться
+                  <Button 
+                    type="submit" 
+                    className="w-full"
+                    disabled={isLoading}
+                  >
+                    {registerRequest.loading ? 'Регистрация...' : 'Зарегистрироваться'}
                   </Button>
                 </form>
               </CardContent>

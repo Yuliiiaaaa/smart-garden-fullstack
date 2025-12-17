@@ -2,7 +2,7 @@
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer
 from fastapi.openapi.models import SecurityScheme
-from app.api.endpoints import health, auth, gardens, trees, analysis, analytics
+from .api.endpoints import health, auth, gardens, trees, analysis, analytics
 from app.middleware.auth_middleware import auth_middleware, role_middleware
 import uvicorn
 
@@ -79,5 +79,6 @@ if __name__ == "__main__":
         "app.main:app",
         host="localhost",
         port=8000,
-        reload=True
+        reload=True,
+        workers=1
     )
