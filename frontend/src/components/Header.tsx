@@ -1,5 +1,6 @@
-import { Link, useLocation } from 'react-router-dom';
-import { Leaf, User } from 'lucide-react';
+// src/components/Header.tsx
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Leaf, User, LogOut } from 'lucide-react';
 import { Button } from './ui/button';
 
 interface HeaderProps {
@@ -9,8 +10,34 @@ interface HeaderProps {
 
 export function Header({ isLoggedIn = false, userName }: HeaderProps) {
   const location = useLocation();
+  const navigate = useNavigate();
   
   const isActive = (path: string) => location.pathname === path;
+  
+  // Получаем реальное имя пользователя из localStorage
+  const getActualUserName = (): string => {
+    if (userName) return userName;
+    
+    try {
+      const userStr = localStorage.getItem('user');
+      if (userStr) {
+        const user = JSON.parse(userStr);
+        return user.full_name || user.email || 'Пользователь';
+      }
+    } catch (error) {
+      console.error('Ошибка получения пользователя:', error);
+    }
+    
+    return 'Пользователь';
+  };
+  
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    navigate('/');
+  };
+  
+  const actualUserName = getActualUserName();
   
   return (
     <header className="border-b bg-white/80 backdrop-blur-md shadow-sm sticky top-0 z-50">
@@ -27,31 +54,57 @@ export function Header({ isLoggedIn = false, userName }: HeaderProps) {
             <>
               <Link 
                 to="/dashboard" 
-                className={`transition-colors ${isActive('/dashboard') ? 'text-primary' : 'text-muted-foreground hover:text-primary'}`}
+                className={`transition-colors ${isActive('/dashboard') ? 'text-primary font-semibold' : 'text-muted-foreground hover:text-primary'}`}
               >
                 Дашборд
               </Link>
               <Link 
                 to="/analysis" 
-                className={`transition-colors ${isActive('/analysis') ? 'text-primary' : 'text-muted-foreground hover:text-primary'}`}
+                className={`transition-colors ${isActive('/analysis') ? 'text-primary font-semibold' : 'text-muted-foreground hover:text-primary'}`}
               >
                 Анализ
               </Link>
               <Link 
                 to="/history" 
-                className={`transition-colors ${isActive('/history') ? 'text-primary' : 'text-muted-foreground hover:text-primary'}`}
+                className={`transition-colors ${isActive('/history') ? 'text-primary font-semibold' : 'text-muted-foreground hover:text-primary'}`}
               >
                 История
               </Link>
               <Link 
                 to="/analytics" 
-                className={`transition-colors ${isActive('/analytics') ? 'text-primary' : 'text-muted-foreground hover:text-primary'}`}
+                className={`transition-colors ${isActive('/analytics') ? 'text-primary font-semibold' : 'text-muted-foreground hover:text-primary'}`}
               >
                 Аналитика
               </Link>
-              <div className="flex items-center gap-2 ml-4">
-                <User className="size-5" />
-                <span>{userName || 'Иван'}</span>
+              <div className="flex items-center gap-3 ml-4">
+                <div className="flex items-center gap-2 bg-secondary/10 px-3 py-1.5 rounded-full">
+                  <User className="size-4" />
+                  <span className="font-medium">{actualUserName}</span>
+                  {/* Показываем роль, если есть */}
+                  <span className="text-xs px-2 py-0.5 bg-primary/10 rounded-full">
+                    {(() => {
+                      try {
+                        const userStr = localStorage.getItem('user');
+                        if (userStr) {
+                          const user = JSON.parse(userStr);
+                          return user.role === 'admin' ? 'Админ' : 
+                                 user.role === 'manager' ? 'Менеджер' : 'Пользователь';
+                        }
+                      } catch {
+                        return 'Пользователь';
+                      }
+                      return 'Пользователь';
+                    })()}
+                  </span>
+                </div>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={handleLogout}
+                  className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                >
+                  <LogOut className="size-4" />
+                </Button>
               </div>
             </>
           ) : (
@@ -63,7 +116,7 @@ export function Header({ isLoggedIn = false, userName }: HeaderProps) {
                 Главная
               </Link>
               <Button asChild className="shadow-md hover:shadow-lg transition-all">
-                <Link to="/auth">Зарегистрироваться</Link>
+                <Link to="/auth">Войти / Регистрация</Link>
               </Button>
             </>
           )}

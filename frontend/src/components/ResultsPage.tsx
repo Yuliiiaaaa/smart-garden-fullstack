@@ -20,7 +20,7 @@ export function ResultsPage() {
   if (!result) {
     return (
       <div className="min-h-screen bg-background">
-        <Header isLoggedIn userName="Иван" />
+        <Header isLoggedIn userName=" " />
         <main className="container mx-auto px-6 py-8 max-w-7xl">
           <div className="text-center py-16">
             <h1 className="text-2xl mb-4">Данные анализа не найдены</h1>
@@ -50,7 +50,7 @@ export function ResultsPage() {
   
   return (
     <div className="min-h-screen bg-background">
-      <Header isLoggedIn userName="Иван" />
+      <Header isLoggedIn userName=" " />
       
       <main className="container mx-auto px-6 py-8 max-w-7xl">
         <div className="mb-8">

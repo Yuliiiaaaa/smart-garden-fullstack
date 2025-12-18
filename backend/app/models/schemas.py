@@ -1,9 +1,9 @@
+# app/models/schemas.py
 from pydantic import BaseModel, Field, validator
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from datetime import datetime
 from enum import Enum
 from pydantic import EmailStr
-from typing import Optional
 
 class FruitType(str, Enum):
     APPLE = "apple"
@@ -81,7 +81,7 @@ class UserBase(BaseModel):
 class UserCreate(UserBase):
     password: str = Field(..., min_length=6, description="Пароль должен быть не менее 6 символов")
 
-class UserLogin(BaseModel):  # ДОБАВЛЯЕМ ЭТОТ КЛАСС
+class UserLogin(BaseModel):
     email: EmailStr
     password: str
 
@@ -100,20 +100,50 @@ class Token(BaseModel):
 
 class TokenData(BaseModel):
     email: Optional[str] = None
-    role: Optional[str] = None  # Добавляем роль в TokenData
+    role: Optional[str] = None
 
 # Схемы для анализа изображений
+class DetectedFruit(BaseModel):
+    fruit_type: str = Field(..., description="Тип фрукта")
+    count: int = Field(..., ge=0, description="Количество")
+    confidence: float = Field(..., ge=0, le=1, description="Уверенность (0-1)")
+    boxes: List[Dict[str, Any]] = Field(default_factory=list, description="Bounding boxes")
+
 class AnalysisResult(BaseModel):
     fruit_count: int = Field(..., ge=0, description="Количество обнаруженных плодов")
     confidence: float = Field(..., ge=0, le=1, description="Уверенность модели (0-1)")
     processing_time: float = Field(..., gt=0, description="Время обработки в секундах")
-    detected_fruits: List[dict] = Field(default_factory=list, description="Список обнаруженных фруктов с деталями")
+    detected_fruits: List[DetectedFruit] = Field(default_factory=list, description="Список обнаруженных фруктов")
     recommendations: str = Field(..., description="Рекомендации на основе анализа")
     record_id: Optional[int] = Field(None, description="ID записи в базе данных")
-    method: str = Field(..., description="Метод анализа (yolo/color_detection)")
+    method: str = Field(..., description="Метод анализа")
     model: Optional[str] = Field(None, description="Используемая модель ИИ")
+    image_url: Optional[str] = Field(None, description="URL изображения")
+    
+    class Config:
+        from_attributes = True
 
-# Схема для загрузки файла (для документации)
+# Схема для загрузки файла
 class ImageUpload(BaseModel):
     tree_id: Optional[int] = Field(None, description="ID дерева")
     fruit_type: str = Field("apple", description="Ожидаемый тип плодов")
+    garden_id: Optional[int] = Field(None, description="ID сада")
+
+# Схема для истории анализов
+class HarvestRecordResponse(BaseModel):
+    id: int
+    tree_id: Optional[int]
+    garden_id: Optional[int]
+    garden_name: Optional[str]
+    fruit_type: Optional[str]
+    harvest_date: Optional[str]
+    fruit_count: int
+    confidence: Optional[float]
+    processing_time: Optional[float]
+    image_url: Optional[str]
+    created_at: Optional[str]
+
+class AnalysisHistoryResponse(BaseModel):
+    analyses: List[HarvestRecordResponse]
+    total: int
+    user: Dict[str, Any]

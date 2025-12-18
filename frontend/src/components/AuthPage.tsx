@@ -36,12 +36,18 @@ export function AuthPage() {
         authService.login(loginEmail, loginPassword)
       );
       
+      // Сохраняем токен
       setAuthToken(result.access_token);
-      // Сохраняем пользователя в localStorage или состоянии
+      
+      // Сохраняем пользователя в localStorage
       localStorage.setItem('user', JSON.stringify(result.user));
+      
+      console.log('Login successful, token saved:', result.access_token.substring(0, 20) + '...');
+      console.log('User data:', result.user);
+      
       navigate('/dashboard');
     } catch (error) {
-      // Ошибка уже обработана в useApiRequest
+      console.error('Login error:', error);
     }
   };
   
@@ -162,7 +168,7 @@ export function AuthPage() {
                     <Input
                       id="register-fullname"
                       type="text"
-                      placeholder="Иванов Иван Иванович"
+                      placeholder=" "
                       value={registerFullName}
                       onChange={(e) => setRegisterFullName(e.target.value)}
                       required

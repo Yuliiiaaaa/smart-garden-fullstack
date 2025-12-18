@@ -28,7 +28,7 @@ const treeData = [
 export function AnalyticsPage() {
   return (
     <div className="min-h-screen bg-background">
-      <Header isLoggedIn userName="Иван" />
+      <Header isLoggedIn userName=" " />
       
       <main className="container mx-auto px-6 py-8 max-w-7xl">
         <div className="mb-8">

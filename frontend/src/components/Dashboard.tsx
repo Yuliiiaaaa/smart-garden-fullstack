@@ -60,12 +60,12 @@ export function Dashboard() {
       const userStr = localStorage.getItem('user');
       if (userStr) {
         const user = JSON.parse(userStr);
-        return user.full_name || user.email || 'Иван';
+        return user.full_name || user.email ;
       }
     } catch (error) {
       console.error('Ошибка при получении пользователя:', error);
     }
-    return 'Иван';
+    return ' ';
   };
   
   // Функция для получения иконки по типу фрукта

@@ -188,6 +188,8 @@ class ImprovedFruitDetector:
         
         return combined_mask
     
+
+
     def _detect_by_circles(self, image: np.ndarray, mask: np.ndarray, fruit_type: str) -> List[Dict]:
         """Детекция круглых объектов (плодов)"""
         if fruit_type not in self.fruit_colors:
@@ -236,21 +238,24 @@ class ImprovedFruitDetector:
         if circles is not None:
             circles = np.uint16(np.around(circles))
             for circle in circles[0, :]:
-                x, y, r = circle
-                # Исправляем переполнение при вычитании
-                x_pos = max(0, int(x - r))
-                y_pos = max(0, int(y - r))
-                width = int(r * 2)
-                height = int(r * 2)
+                x, y, r = int(circle[0]), int(circle[1]), int(circle[2])
+                # ИСПРАВЛЕНО: проверяем чтобы координаты не выходили за границы
+                x_pos = max(0, x - r)
+                y_pos = max(0, y - r)
+                width = r * 2
+                height = r * 2
                 
-                detected_circles.append({
-                    'x': x_pos,
-                    'y': y_pos,
-                    'width': width,
-                    'height': height,
-                    'radius': int(r),
-                    'center': (int(x), int(y))
-                })
+                # Проверяем чтобы не выходило за границы изображения
+                height_img, width_img = image.shape[:2]
+                if x_pos + width <= width_img and y_pos + height <= height_img:
+                    detected_circles.append({
+                        'x': x_pos,
+                        'y': y_pos,
+                        'width': width,
+                        'height': height,
+                        'radius': r,
+                        'center': (x, y)
+                    })
         
         return detected_circles
     

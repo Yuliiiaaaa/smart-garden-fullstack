@@ -110,7 +110,7 @@ export function AnalysisPage() {
   
   return (
     <div className="min-h-screen bg-background">
-      <Header isLoggedIn userName="Иван" />
+      <Header isLoggedIn userName=" " />
       
       <main className="container mx-auto px-6 py-8 max-w-4xl">
         <div className="mb-8">
