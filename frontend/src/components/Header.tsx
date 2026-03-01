@@ -1,43 +1,87 @@
 // src/components/Header.tsx
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Leaf, User, LogOut } from 'lucide-react';
+import { Leaf, User, LogOut, Settings, Users } from 'lucide-react';
 import { Button } from './ui/button';
+import { useState, useEffect } from 'react';
 
 interface HeaderProps {
   isLoggedIn?: boolean;
   userName?: string;
 }
 
+// Интерфейс пользователя из localStorage
+interface UserData {
+  id: number;
+  email: string;
+  full_name: string;
+  role: string;
+  is_active: boolean;
+  created_at: string;
+}
+
 export function Header({ isLoggedIn = false, userName }: HeaderProps) {
   const location = useLocation();
   const navigate = useNavigate();
+  const [user, setUser] = useState<UserData | null>(null);
   
-  const isActive = (path: string) => location.pathname === path;
-  
-  // Получаем реальное имя пользователя из localStorage
-  const getActualUserName = (): string => {
-    if (userName) return userName;
-    
+  useEffect(() => {
+    // Загружаем пользователя из localStorage при монтировании
     try {
       const userStr = localStorage.getItem('user');
       if (userStr) {
-        const user = JSON.parse(userStr);
-        return user.full_name || user.email || 'Пользователь';
+        setUser(JSON.parse(userStr));
       }
     } catch (error) {
-      console.error('Ошибка получения пользователя:', error);
+      console.error('Ошибка при получении пользователя:', error);
     }
-    
+  }, [isLoggedIn]); // Обновляем при изменении isLoggedIn
+  
+  const isActive = (path: string): boolean => location.pathname === path;
+  
+  // Получаем имя пользователя
+  const getUserName = (): string => {
+    if (userName) return userName;
+    if (user) return user.full_name || user.email;
     return 'Пользователь';
   };
   
-  const handleLogout = () => {
+  // Получаем роль пользователя
+  const getUserRole = (): string => {
+    if (user) return user.role;
+    return 'user';
+  };
+  
+  // Получаем отображаемое название роли
+  const getRoleDisplay = (): string => {
+    const role = getUserRole();
+    switch (role) {
+      case 'admin': return 'Админ';
+      case 'manager': return 'Менеджер';
+      default: return 'Пользователь';
+    }
+  };
+  
+  // Получаем цвет для роли
+  const getRoleColor = (): string => {
+    const role = getUserRole();
+    switch (role) {
+      case 'admin': return 'bg-purple-100 text-purple-700';
+      case 'manager': return 'bg-blue-100 text-blue-700';
+      default: return 'bg-gray-100 text-gray-700';
+    }
+  };
+  
+  const handleLogout = (): void => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
+    setUser(null);
     navigate('/');
   };
   
-  const actualUserName = getActualUserName();
+  const actualUserName = getUserName();
+  const userRole = getUserRole();
+  const roleDisplay = getRoleDisplay();
+  const roleColor = getRoleColor();
   
   return (
     <header className="border-b bg-white/80 backdrop-blur-md shadow-sm sticky top-0 z-50">
@@ -50,58 +94,97 @@ export function Header({ isLoggedIn = false, userName }: HeaderProps) {
         </Link>
         
         <nav className="flex items-center gap-6">
-          {isLoggedIn ? (
+          {isLoggedIn || user ? (
             <>
               <Link 
                 to="/dashboard" 
-                className={`transition-colors ${isActive('/dashboard') ? 'text-primary font-semibold' : 'text-muted-foreground hover:text-primary'}`}
+                className={`transition-colors ${
+                  isActive('/dashboard') 
+                    ? 'text-primary font-semibold' 
+                    : 'text-muted-foreground hover:text-primary'
+                }`}
               >
                 Дашборд
               </Link>
+              
               <Link 
                 to="/analysis" 
-                className={`transition-colors ${isActive('/analysis') ? 'text-primary font-semibold' : 'text-muted-foreground hover:text-primary'}`}
+                className={`transition-colors ${
+                  isActive('/analysis') 
+                    ? 'text-primary font-semibold' 
+                    : 'text-muted-foreground hover:text-primary'
+                }`}
               >
                 Анализ
               </Link>
+              
               <Link 
                 to="/history" 
-                className={`transition-colors ${isActive('/history') ? 'text-primary font-semibold' : 'text-muted-foreground hover:text-primary'}`}
+                className={`transition-colors ${
+                  isActive('/history') 
+                    ? 'text-primary font-semibold' 
+                    : 'text-muted-foreground hover:text-primary'
+                }`}
               >
                 История
               </Link>
+              
               <Link 
                 to="/analytics" 
-                className={`transition-colors ${isActive('/analytics') ? 'text-primary font-semibold' : 'text-muted-foreground hover:text-primary'}`}
+                className={`transition-colors ${
+                  isActive('/analytics') 
+                    ? 'text-primary font-semibold' 
+                    : 'text-muted-foreground hover:text-primary'
+                }`}
               >
                 Аналитика
               </Link>
+
+              {/* Ссылки для менеджера и администратора */}
+              {(userRole === 'manager' || userRole === 'admin') && (
+                <Link 
+                  to="/gardens/manage" 
+                  className={`flex items-center gap-1 transition-colors ${
+                    isActive('/gardens/manage') 
+                      ? 'text-primary font-semibold' 
+                      : 'text-muted-foreground hover:text-primary'
+                  }`}
+                >
+                  <Settings className="size-4" />
+                  <span>Управление садами</span>
+                </Link>
+              )}
+              
+              {/* Ссылки только для администратора */}
+              {userRole === 'admin' && (
+                <Link 
+                  to="/admin/users" 
+                  className={`flex items-center gap-1 transition-colors ${
+                    isActive('/admin/users') 
+                      ? 'text-primary font-semibold' 
+                      : 'text-muted-foreground hover:text-primary'
+                  }`}
+                >
+                  <Users className="size-4" />
+                  <span>Пользователи</span>
+                </Link>
+              )}
+              
               <div className="flex items-center gap-3 ml-4">
                 <div className="flex items-center gap-2 bg-secondary/10 px-3 py-1.5 rounded-full">
                   <User className="size-4" />
                   <span className="font-medium">{actualUserName}</span>
-                  {/* Показываем роль, если есть */}
-                  <span className="text-xs px-2 py-0.5 bg-primary/10 rounded-full">
-                    {(() => {
-                      try {
-                        const userStr = localStorage.getItem('user');
-                        if (userStr) {
-                          const user = JSON.parse(userStr);
-                          return user.role === 'admin' ? 'Админ' : 
-                                 user.role === 'manager' ? 'Менеджер' : 'Пользователь';
-                        }
-                      } catch {
-                        return 'Пользователь';
-                      }
-                      return 'Пользователь';
-                    })()}
+                  <span className={`text-xs px-2 py-0.5 rounded-full ${roleColor}`}>
+                    {roleDisplay}
                   </span>
                 </div>
+                
                 <Button 
                   variant="ghost" 
                   size="sm" 
                   onClick={handleLogout}
                   className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                  aria-label="Выйти"
                 >
                   <LogOut className="size-4" />
                 </Button>
@@ -111,11 +194,19 @@ export function Header({ isLoggedIn = false, userName }: HeaderProps) {
             <>
               <Link 
                 to="/" 
-                className={`transition-colors ${isActive('/') ? 'text-primary' : 'text-muted-foreground hover:text-primary'}`}
+                className={`transition-colors ${
+                  isActive('/') 
+                    ? 'text-primary font-semibold' 
+                    : 'text-muted-foreground hover:text-primary'
+                }`}
               >
                 Главная
               </Link>
-              <Button asChild className="shadow-md hover:shadow-lg transition-all">
+              
+              <Button 
+                asChild 
+                className="shadow-md hover:shadow-lg transition-all"
+              >
                 <Link to="/auth">Войти / Регистрация</Link>
               </Button>
             </>

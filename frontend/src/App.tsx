@@ -1,4 +1,4 @@
-// src/App.tsx (обновленный)
+// src/App.tsx
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { LandingPage } from './components/LandingPage';
 import { AuthPage } from './components/AuthPage';
@@ -7,17 +7,26 @@ import { AnalysisPage } from './components/AnalysisPage';
 import { ResultsPage } from './components/ResultsPage';
 import { AnalyticsPage } from './components/AnalyticsPage';
 import { HistoryPage } from './components/HistoryPage';
+import { GardensManagementPage } from './components/GardensManagementPage';   // новый
+import { AdminUsersPage } from './components/AdminUsersPage';                 // новый
 import { Toaster } from './components/ui/sonner';
 import { getAuthToken } from './services/apiConfig';
 
-// Компонент для защищенных маршрутов
+// Компонент для проверки аутентификации
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const token = getAuthToken();
-  
-  if (!token) {
-    return <Navigate to="/auth" replace />;
-  }
-  
+  if (!token) return <Navigate to="/auth" replace />;
+  return <>{children}</>;
+};
+
+// Компонент для проверки роли
+const RoleRoute = ({ children, allowedRoles }: { children: React.ReactNode, allowedRoles: string[] }) => {
+  const token = getAuthToken();
+  const userStr = localStorage.getItem('user');
+  const user = userStr ? JSON.parse(userStr) : null;
+
+  if (!token || !user) return <Navigate to="/auth" replace />;
+  if (!allowedRoles.includes(user.role)) return <Navigate to="/dashboard" replace />;
   return <>{children}</>;
 };
 
@@ -28,46 +37,32 @@ export default function App() {
         <Routes>
           <Route path="/" element={<LandingPage />} />
           <Route path="/auth" element={<AuthPage />} />
-          <Route 
-            path="/dashboard" 
+
+          {/* Защищённые маршруты (только авторизованные) */}
+          <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+          <Route path="/analysis" element={<ProtectedRoute><AnalysisPage /></ProtectedRoute>} />
+          <Route path="/results" element={<ProtectedRoute><ResultsPage /></ProtectedRoute>} />
+          <Route path="/analytics" element={<ProtectedRoute><AnalyticsPage /></ProtectedRoute>} />
+          <Route path="/history" element={<ProtectedRoute><HistoryPage /></ProtectedRoute>} />
+
+          {/* Маршруты с ролевыми ограничениями */}
+          <Route
+            path="/gardens/manage"
             element={
-              <ProtectedRoute>
-                <Dashboard />
-              </ProtectedRoute>
-            } 
+              <RoleRoute allowedRoles={['manager', 'admin']}>
+                <GardensManagementPage />
+              </RoleRoute>
+            }
           />
-          <Route 
-            path="/analysis" 
+          <Route
+            path="/admin/users"
             element={
-              <ProtectedRoute>
-                <AnalysisPage />
-              </ProtectedRoute>
-            } 
+              <RoleRoute allowedRoles={['admin']}>
+                <AdminUsersPage />
+              </RoleRoute>
+            }
           />
-          <Route 
-            path="/results" 
-            element={
-              <ProtectedRoute>
-                <ResultsPage />
-              </ProtectedRoute>
-            } 
-          />
-          <Route 
-            path="/analytics" 
-            element={
-              <ProtectedRoute>
-                <AnalyticsPage />
-              </ProtectedRoute>
-            } 
-          />
-          <Route 
-            path="/history" 
-            element={
-              <ProtectedRoute>
-                <HistoryPage />
-              </ProtectedRoute>
-            } 
-          />
+
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
         <Toaster />

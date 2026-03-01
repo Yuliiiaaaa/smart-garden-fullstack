@@ -27,6 +27,7 @@ export interface User {
 export interface Garden {
   id: number;
   name: string;
+  location: string;
   fruit_type: string;
   area: number;
   created_at?: string;

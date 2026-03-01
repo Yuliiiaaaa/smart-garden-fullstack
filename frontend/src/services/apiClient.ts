@@ -1,7 +1,7 @@
-// apiClient.ts (с debug логированием)
+// src/services/apiClient.ts
 import { API_BASE_URL, getAuthToken } from './apiConfig';
 
-class ApiErrorClass extends Error {
+export class ApiError extends Error {
   status: number;
   data?: any;
 
@@ -21,10 +21,6 @@ async function apiRequest<T>(
   const token = getAuthToken();
   
   console.log(`API Request to: ${endpoint}`);
-  console.log(`Token exists: ${!!token}`);
-  if (token) {
-    console.log(`Token (first 20 chars): ${token.substring(0, 20)}...`);
-  }
   
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -35,15 +31,11 @@ async function apiRequest<T>(
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  console.log('Request headers:', headers);
-
   try {
     const response = await fetch(`${API_BASE_URL}${endpoint}`, {
       ...options,
       headers,
     });
-
-    console.log(`Response status: ${response.status} ${response.statusText}`);
 
     if (!response.ok) {
       let errorData;
@@ -53,22 +45,18 @@ async function apiRequest<T>(
         errorData = { message: response.statusText };
       }
 
-      console.error('API Error:', errorData);
-      throw new ApiErrorClass(
+      throw new ApiError(
         errorData.detail || errorData.message || 'API Error',
         response.status,
         errorData
       );
     }
 
-    // Если ответ 204 (No Content)
     if (response.status === 204) {
       return {} as T;
     }
 
-    const data = await response.json();
-    console.log('API Response data:', data);
-    return data;
+    return await response.json() as T;
   } catch (error) {
     console.error('Fetch error:', error);
     throw error;
@@ -82,16 +70,11 @@ async function uploadFile<T>(
 ): Promise<T> {
   const token = getAuthToken();
   
-  console.log(`Upload to: ${endpoint}`);
-  console.log(`Token exists: ${!!token}`);
-  
   const headers: Record<string, string> = {};
 
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
   }
-
-  console.log('Upload headers:', headers);
 
   try {
     const response = await fetch(`${API_BASE_URL}${endpoint}`, {
@@ -100,21 +83,16 @@ async function uploadFile<T>(
       body: formData,
     });
 
-    console.log(`Upload response status: ${response.status} ${response.statusText}`);
-
     if (!response.ok) {
       const errorData = await response.json();
-      console.error('Upload error:', errorData);
-      throw new ApiErrorClass(
+      throw new ApiError(
         errorData.detail || 'Upload failed',
         response.status,
         errorData
       );
     }
 
-    const data = await response.json();
-    console.log('Upload response data:', data);
-    return data;
+    return await response.json() as T;
   } catch (error) {
     console.error('Upload fetch error:', error);
     throw error;
@@ -122,24 +100,30 @@ async function uploadFile<T>(
 }
 
 export const apiClient = {
-  get: <T>(endpoint: string) => apiRequest<T>(endpoint, { method: 'GET' }),
-  post: <T>(endpoint: string, data: any) =>
+  get: <T>(endpoint: string): Promise<T> => 
+    apiRequest<T>(endpoint, { method: 'GET' }),
+    
+  post: <T>(endpoint: string, data: any): Promise<T> =>
     apiRequest<T>(endpoint, {
       method: 'POST',
       body: JSON.stringify(data),
     }),
-  put: <T>(endpoint: string, data: any) =>
+    
+  put: <T>(endpoint: string, data: any): Promise<T> =>
     apiRequest<T>(endpoint, {
       method: 'PUT',
       body: JSON.stringify(data),
     }),
-  patch: <T>(endpoint: string, data: any) =>
+    
+  patch: <T>(endpoint: string, data: any): Promise<T> =>
     apiRequest<T>(endpoint, {
       method: 'PATCH',
       body: JSON.stringify(data),
     }),
-  delete: <T>(endpoint: string) =>
+    
+  delete: <T>(endpoint: string): Promise<T> =>
     apiRequest<T>(endpoint, { method: 'DELETE' }),
-  upload: <T>(endpoint: string, formData: FormData) =>
+    
+  upload: <T>(endpoint: string, formData: FormData): Promise<T> =>
     uploadFile<T>(endpoint, formData),
 };

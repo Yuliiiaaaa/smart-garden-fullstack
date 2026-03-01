@@ -1,4 +1,5 @@
-﻿from fastapi import FastAPI, Depends
+﻿# app/main.py
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer
 from app.api.endpoints import health, auth, gardens, trees, analysis, analytics
@@ -43,10 +44,10 @@ app = FastAPI(
 # 1. ВАЖНО: CORS middleware ДОЛЖЕН быть ПЕРВЫМ
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000", "*"],  # Добавьте ваш фронтенд URL
+    allow_origins=["http://localhost:5173", "http://localhost:3000", "http://localhost:8000"],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-    allow_headers=["*"],  # Разрешаем все заголовки, включая Authorization
+    allow_headers=["*"],
     expose_headers=["*"],
 )
 
@@ -72,8 +73,7 @@ async def api_status():
     """Публичный эндпоинт для проверки статуса API"""
     return {"status": "API is running", "authenticated": False}
 
-
-# Добавьте обработчик OPTIONS для корневого пути
+# Обработчик OPTIONS для всех путей
 @app.options("/{full_path:path}")
 async def options_handler(full_path: str):
     """Обработчик OPTIONS запросов для всех путей"""
@@ -83,7 +83,7 @@ async def options_handler(full_path: str):
 if __name__ == "__main__":
     uvicorn.run(
         "app.main:app",
-        host="0.0.0.0",  # Изменено с localhost на 0.0.0.0
+        host="0.0.0.0",
         port=8000,
         reload=True
     )

@@ -7,6 +7,7 @@ from app.models.schemas import UserRole
 
 security = HTTPBearer(auto_error=False)
 
+#П олучает пользователя из БД по email, извлеченного из JWT.
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
     db: Session = Depends(get_db)
@@ -81,10 +82,7 @@ async def get_garden_owner(
             detail=f"Сад с ID {garden_id} не найден"
         )
     
-    # В будущем можно добавить связь пользователь-сад
-    # Пока разрешаем всем авторизованным пользователям
     if current_user.role not in ["admin", "manager"]:
-        # Здесь можно добавить проверку на владение садом
         pass
     
     return current_user

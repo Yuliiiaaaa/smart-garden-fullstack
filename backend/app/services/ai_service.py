@@ -5,7 +5,7 @@ from .improved_detector import improved_detector
 logger = logging.getLogger(__name__)
 
 class FruitDetectionService:
-    """Сервис детекции фруктов с улучшенной стабильностью"""
+    """Сервис детекции фруктов"""
     
     def __init__(self):
         self.detector = improved_detector
@@ -13,7 +13,7 @@ class FruitDetectionService:
     
     def process_image(self, image_bytes: bytes, expected_fruit: str = 'apple') -> Dict[str, Any]:
         """
-        Обрабатывает изображение с улучшенной стабильностью
+        Обрабатывает изображение
         """
         try:
             # Для стабильности - нормализуем тип фрукта

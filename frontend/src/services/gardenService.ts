@@ -2,7 +2,6 @@
 import { apiClient } from './apiClient';
 import { Garden as GardenType, Tree as TreeType } from './apiConfig';
 
-// Переименовываем интерфейсы, чтобы избежать конфликта
 export interface GardenStats {
   garden_id: number;
   garden_name: string;
@@ -15,7 +14,6 @@ export interface GardenStats {
   fruit_type: string;
 }
 
-// Используем другое имя для локального интерфейса дерева
 export interface TreeData {
   id: number;
   garden_id: number;
@@ -27,7 +25,6 @@ export interface TreeData {
 }
 
 export const gardenService = {
-  // Получить все сады
   getAllGardens: async (skip = 0, limit = 100): Promise<GardenType[]> => {
     const response = await apiClient.get<GardenType[]>(
       `/gardens/?skip=${skip}&limit=${limit}`
@@ -35,21 +32,20 @@ export const gardenService = {
     return response;
   },
 
-  // Получить сад по ID
   getGardenById: async (gardenId: number): Promise<GardenType> => {
     const response = await apiClient.get<GardenType>(`/gardens/${gardenId}`);
     return response;
   },
 
-  // Получить статистику сада
   getGardenStats: async (gardenId: number): Promise<GardenStats> => {
     const response = await apiClient.get<GardenStats>(`/gardens/${gardenId}/stats`);
     return response;
   },
 
-  // Создать сад
+  // Исправлено: добавлено поле location
   createGarden: async (gardenData: {
     name: string;
+    location: string;          // добавлено
     fruit_type: string;
     area: number;
   }): Promise<GardenType> => {
@@ -57,13 +53,11 @@ export const gardenService = {
     return response;
   },
 
-  // Получить деревья сада
   getGardenTrees: async (gardenId: number): Promise<TreeData[]> => {
     const response = await apiClient.get<TreeData[]>(`/trees/?garden_id=${gardenId}`);
     return response;
   },
 
-  // Обновить информацию о саде
   updateGarden: async (gardenId: number, gardenData: {
     name?: string;
     fruit_type?: string;
@@ -73,7 +67,6 @@ export const gardenService = {
     return response;
   },
 
-  // Удалить сад
   deleteGarden: async (gardenId: number): Promise<{ message: string; deleted_id: number }> => {
     const response = await apiClient.delete<{ message: string; deleted_id: number }>(`/gardens/${gardenId}`);
     return response;
