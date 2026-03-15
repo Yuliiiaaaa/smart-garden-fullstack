@@ -1,10 +1,10 @@
 // src/services/apiClient.ts
-import { API_BASE_URL, getAuthToken } from './apiConfig';
+import { API_BASE_URL, getAuthToken, getRefreshToken, setAuthToken, setRefreshToken, removeTokens } from './apiConfig';
+import { authService } from './authService';
 
 export class ApiError extends Error {
   status: number;
   data?: any;
-
   constructor(message: string, status: number, data?: any) {
     super(message);
     this.name = 'ApiError';
@@ -13,15 +13,27 @@ export class ApiError extends Error {
   }
 }
 
-// Универсальная функция для запросов
+let isRefreshing = false;
+let failedQueue: { resolve: (value: any) => void; reject: (reason?: any) => void; }[] = [];
+
+const processQueue = (error: any, token: string | null = null) => {
+  failedQueue.forEach(prom => {
+    if (error) {
+      prom.reject(error);
+    } else {
+      prom.resolve(token);
+    }
+  });
+  failedQueue = [];
+};
+
 async function apiRequest<T>(
   endpoint: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
+  retry = true
 ): Promise<T> {
-  const token = getAuthToken();
-  
-  console.log(`API Request to: ${endpoint}`);
-  
+  let token = getAuthToken();
+
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(options.headers as Record<string, string> || {}),
@@ -32,10 +44,44 @@ async function apiRequest<T>(
   }
 
   try {
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-      ...options,
-      headers,
-    });
+    let response = await fetch(`${API_BASE_URL}${endpoint}`, { ...options, headers });
+
+    // Если 401 и есть refresh token, пробуем обновить
+    if (response.status === 401 && retry) {
+      const refreshToken = getRefreshToken();
+      if (!refreshToken) {
+        removeTokens();
+        throw new ApiError('Требуется авторизация', 401);
+      }
+
+      if (!isRefreshing) {
+        isRefreshing = true;
+        try {
+          const newAuth = await authService.refreshToken(refreshToken);
+          setAuthToken(newAuth.access_token);
+          setRefreshToken(newAuth.refresh_token);
+          processQueue(null, newAuth.access_token);
+          
+          // Повторяем исходный запрос
+          headers['Authorization'] = `Bearer ${newAuth.access_token}`;
+          response = await fetch(`${API_BASE_URL}${endpoint}`, { ...options, headers });
+        } catch (refreshError) {
+          processQueue(refreshError, null);
+          removeTokens();
+          throw new ApiError('Сессия истекла. Войдите снова.', 401);
+        } finally {
+          isRefreshing = false;
+        }
+      } else {
+        // Ставим в очередь
+        return new Promise((resolve, reject) => {
+          failedQueue.push({ resolve, reject });
+        }).then((newToken: any) => {
+          headers['Authorization'] = `Bearer ${newToken}`;
+          return fetch(`${API_BASE_URL}${endpoint}`, { ...options, headers });
+        }).then(res => res.json());
+      }
+    }
 
     if (!response.ok) {
       let errorData;
@@ -44,7 +90,6 @@ async function apiRequest<T>(
       } catch {
         errorData = { message: response.statusText };
       }
-
       throw new ApiError(
         errorData.detail || errorData.message || 'API Error',
         response.status,
@@ -58,12 +103,11 @@ async function apiRequest<T>(
 
     return await response.json() as T;
   } catch (error) {
-    console.error('Fetch error:', error);
-    throw error;
+    if (error instanceof ApiError) throw error;
+    throw new ApiError((error as Error).message, 500);
   }
 }
 
-// Функция для загрузки файлов
 async function uploadFile<T>(
   endpoint: string,
   formData: FormData

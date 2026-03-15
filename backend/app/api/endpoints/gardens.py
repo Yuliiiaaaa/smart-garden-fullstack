@@ -3,9 +3,9 @@ from fastapi import APIRouter, HTTPException, Depends, status
 from sqlalchemy.orm import Session
 from typing import List
 from sqlalchemy import func
-
+from app.models.schemas import GardenCreate, GardenUpdate, Garden as GardenSchema, SortOrder, GardenFilterParams
 from app.models.database import get_db, Garden, User, Tree, HarvestRecord
-from app.models.schemas import GardenCreate, GardenUpdate, Garden as GardenSchema
+from app.models.schemas import GardenCreate, GardenUpdate, Garden as GardenSchema, GardenFilterParams
 from app.api.dependencies import get_current_user, get_manager_user, get_admin_user
 
 router = APIRouter()
@@ -13,12 +13,37 @@ router = APIRouter()
 # Публичный эндпоинт (доступен всем аутентифицированным)
 @router.get("/", response_model=List[GardenSchema])
 async def get_gardens(
-    skip: int = 0,
-    limit: int = 100,
+    params: GardenFilterParams = Depends(),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)   # добавлено требование аутентификации
-):
-    gardens = db.query(Garden).offset(skip).limit(limit).all()
+    current_user: User = Depends(get_current_user)):   # теперь доступно только авторизованным
+
+    query = db.query(Garden)
+    
+    # Применение фильтров
+    if params.name:
+        query = query.filter(Garden.name.ilike(f"%{params.name}%"))
+    if params.location:
+        query = query.filter(Garden.location.ilike(f"%{params.location}%"))
+    if params.fruit_type:
+        query = query.filter(Garden.fruit_type == params.fruit_type)
+    if params.area_min is not None:
+        query = query.filter(Garden.area >= params.area_min)
+    if params.area_max is not None:
+        query = query.filter(Garden.area <= params.area_max)
+    if params.search:
+        query = query.filter(
+            (Garden.name.ilike(f"%{params.search}%")) |
+            (Garden.location.ilike(f"%{params.search}%"))
+        )
+    
+    # Сортировка
+    sort_column = getattr(Garden, params.sort_by, Garden.name)
+    if params.sort_order == SortOrder.DESC:
+        sort_column = sort_column.desc()
+    query = query.order_by(sort_column)
+    
+    # Пагинация
+    gardens = query.offset(params.skip).limit(params.limit).all()
     return gardens
 
 @router.get("/{garden_id}/stats", response_model=dict)

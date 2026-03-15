@@ -10,12 +10,10 @@ from app.models.schemas import AnalysisResult
 from app.api.dependencies import get_current_user
 from app.services.ai_service import ai_service
 from app.utils.image_utils import save_uploaded_file, validate_image_file
-
+from app.core.storage import StorageService
 router = APIRouter()
 
-# Создаем директорию для загрузок
-UPLOAD_DIR = "uploads"
-os.makedirs(UPLOAD_DIR, exist_ok=True)
+
 
 @router.post("/photo", response_model=AnalysisResult)
 async def analyze_photo(
@@ -24,7 +22,8 @@ async def analyze_photo(
     fruit_type: str = "apple",
     garden_id: Optional[int] = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    storage: StorageService = Depends()  # внедряем сервис хранилища
 ):
     """Анализ фотографии для подсчета плодов с использованием ИИ"""
     
@@ -47,21 +46,30 @@ async def analyze_photo(
         detection_result = ai_service.process_image(contents, fruit_type)
         processing_time = (datetime.now() - start_time).total_seconds()
         
-        # Сохраняем файл
-        filepath = save_uploaded_file(file, UPLOAD_DIR)
+        # 📁 ЗАГРУЗКА ФАЙЛА В S3 (вместо локального сохранения)
+        # Сбрасываем указатель файла в начало, потому что мы уже прочитали его в contents
+        await file.seek(0)
         
+        # Создаём путь в хранилище: users/{user_id}/analysis/{uuid}_{original_filename}
+        file_extension = os.path.splitext(file.filename)[1]
+        s3_key = f"users/{current_user.id}/analysis/{uuid.uuid4()}{file_extension}"
+        
+        # Загружаем в S3
+        await storage.upload_fileobj(file.file, s3_key, file.content_type)
+        
+        print(f" Файл загружен в S3: {s3_key}")
         print(f" Результат ИИ: {detection_result.get('total_fruits', 0)} плодов, уверенность: {detection_result.get('confidence', 0)}")
         
-        # Создаем запись в базе данных (используем ОБНОВЛЕННУЮ модель)
+        # Создаем запись в базе данных (сохраняем S3 key вместо локального пути)
         harvest_record = HarvestRecord(
             tree_id=tree_id,
             garden_id=garden_id,
             fruit_count=detection_result.get('total_fruits', 0),
             fruit_type=fruit_type,
-            image_path=filepath,
+            image_path=s3_key,  # теперь храним S3 key
             confidence_score=detection_result.get('confidence', 0.0),
             processing_time=processing_time,
-            user_id=current_user.id  # Сохраняем ID пользователя
+            user_id=current_user.id
         )
         
         db.add(harvest_record)
@@ -81,7 +89,7 @@ async def analyze_photo(
                         detected_list.append({
                             "fruit_type": ft,
                             "count": fruit_data.get('count', 0),
-                            "confidence": fruit_data.get('confidence', fruit_data.get('avg_confidence', detection_result.get('confidence', 0.0))),  # Берем из разных мест
+                            "confidence": fruit_data.get('confidence', fruit_data.get('avg_confidence', detection_result.get('confidence', 0.0))),
                             "boxes": fruit_data.get('boxes', [])
                         })
 
@@ -94,10 +102,16 @@ async def analyze_photo(
                 "boxes": []
             }]
 
-        # Также убедитесь что confidence есть во всех элементах
+        # Убедимся что confidence есть во всех элементах
         for item in detected_list:
             if 'confidence' not in item:
                 item['confidence'] = detection_result.get('confidence', 0.0)
+        
+        # 🔗 Генерируем временную ссылку на изображение (pre-signed URL)
+        image_url = None
+        if s3_key:
+            # Срок действия ссылки - 1 час (3600 секунд)
+            image_url = storage.get_presigned_url(s3_key, expires_in=3600)
         
         return AnalysisResult(
             fruit_count=detection_result.get('total_fruits', 0),
@@ -108,7 +122,7 @@ async def analyze_photo(
             record_id=harvest_record.id,
             method=detection_result.get('method', 'unknown'),
             model=detection_result.get('model', 'simple'),
-            image_url=f"/uploads/{os.path.basename(filepath)}" if filepath else None
+            image_url=image_url  # теперь это pre-signed URL, а не локальный путь
         )
         
     except Exception as e:
@@ -119,7 +133,6 @@ async def analyze_photo(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Ошибка при обработке изображения: {str(e)}"
         )
-
 @router.get("/history")
 async def get_analysis_history(
     garden_id: Optional[int] = None,

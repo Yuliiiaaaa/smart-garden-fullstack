@@ -15,6 +15,5 @@ databases==0.8.0
 python-multipart==0.0.6
 passlib[bcrypt]==1.7.4
 python-dotenv==1.0.0
-
-# Дополнительные для работы с файлами
+pydantic-settings==2.1.0
 aiofiles==23.2.1

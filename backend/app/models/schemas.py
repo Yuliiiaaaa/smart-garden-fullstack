@@ -5,6 +5,22 @@ from datetime import datetime
 from enum import Enum
 from pydantic import EmailStr
 
+class SortOrder(str, Enum):
+    ASC = "asc"
+    DESC = "desc"
+    
+class GardenFilterParams(BaseModel):
+    name: Optional[str] = None
+    location: Optional[str] = None
+    fruit_type: Optional[str] = None          # 'apple', 'pear', 'cherry'
+    area_min: Optional[float] = Field(None, ge=0)
+    area_max: Optional[float] = Field(None, ge=0)
+    search: Optional[str] = None               # поиск по name и location
+    sort_by: str = Field("name", pattern="^(name|area|created_at)$")
+    sort_order: SortOrder = SortOrder.ASC
+    skip: int = Field(0, ge=0)
+    limit: int = Field(100, ge=1, le=1000)
+
 class FruitType(str, Enum):
     APPLE = "apple"
     PEAR = "pear"
@@ -93,10 +109,17 @@ class User(UserBase):
     class Config:
         from_attributes = True
 
+class RefreshTokenRequest(BaseModel):
+    refresh_token: str
+
+class LogoutRequest(BaseModel):
+    refresh_token: str
+    
 class Token(BaseModel):
     access_token: str
+    refresh_token: str
     token_type: str
-    user: User
+    user: 'User'
 
 class TokenData(BaseModel):
     email: Optional[str] = None
@@ -129,9 +152,18 @@ class ImageUpload(BaseModel):
     fruit_type: str = Field("apple", description="Ожидаемый тип плодов")
     garden_id: Optional[int] = Field(None, description="ID сада")
 
+class RefreshTokenRequest(BaseModel):
+    refresh_token: str
+
+class LogoutRequest(BaseModel):
+    refresh_token: str
 # Схема для истории анализов
 class HarvestRecordResponse(BaseModel):
     id: int
+    access_token: str
+    refresh_token: str
+    token_type: str
+    user: User
     tree_id: Optional[int]
     garden_id: Optional[int]
     garden_name: Optional[str]

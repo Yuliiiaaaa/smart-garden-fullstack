@@ -1,39 +1,29 @@
 # app/api/endpoints/auth.py
-from fastapi import APIRouter, HTTPException, status, Depends
+from fastapi import APIRouter, HTTPException, status, Depends, Request
 from sqlalchemy.orm import Session
-from datetime import timedelta
 from typing import List
 
 from app.models.database import get_db, User
-from app.models.schemas import UserCreate, User as UserSchema, Token, UserLogin
-from app.core.security import (
-    get_password_hash, verify_password, create_access_token,
-    ACCESS_TOKEN_EXPIRE_MINUTES
+from app.models.schemas import (
+    UserCreate, User as UserSchema, UserLogin,
+    Token, RefreshTokenRequest, LogoutRequest
 )
+from app.core.security import get_password_hash, verify_password
+from app.core.token_service import TokenService
 from app.api.dependencies import get_current_user, get_admin_user
 
 router = APIRouter()
 
-@router.options("/login")
-async def login_options():
-    """OPTIONS handler for login endpoint"""
-    return {"message": "OK"}
-
-@router.options("/register")
-async def register_options():
-    """OPTIONS handler for register endpoint"""
-    return {"message": "OK"}
-
 @router.post("/login", response_model=Token)
-async def login(user_data: UserLogin, db: Session = Depends(get_db)):
-    """Аутентификация пользователя"""
-    print(f"Login attempt for email: {user_data.email}")
-    
-    # Ищем пользователя по email
+async def login(
+    user_data: UserLogin,
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    """Вход в систему, получение пары токенов"""
+    # Поиск пользователя
     user = db.query(User).filter(User.email == user_data.email).first()
-    
     if not user or not verify_password(user_data.password, user.hashed_password):
-        print(f"Login failed for {user_data.email}: invalid credentials")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Неверный email или пароль",
@@ -41,84 +31,106 @@ async def login(user_data: UserLogin, db: Session = Depends(get_db)):
         )
     
     if not user.is_active:
-        print(f"Login failed for {user_data.email}: user inactive")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Пользователь деактивирован",
+            detail="Пользователь деактивирован"
         )
     
-    # Создаем токен с role в payload
-    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(
-        data={
-            "sub": user.email,
-            "role": user.role
-        },
-        expires_delta=access_token_expires
+    # Создание токенов через сервис
+    token_service = TokenService(db)
+    access_token = token_service.create_access_token(
+        {"sub": user.email, "role": user.role}
     )
-    
-    print(f"Login successful for {user_data.email} with role {user.role}")
+    refresh_token = token_service.create_refresh_token(
+        user_id=user.id,
+        user_agent=request.headers.get("user-agent"),
+        ip=request.client.host
+    )
     
     return {
         "access_token": access_token,
+        "refresh_token": refresh_token,
         "token_type": "bearer",
-        "user": {
-            "id": user.id,
-            "email": user.email,
-            "full_name": user.full_name,
-            "role": user.role,
-            "is_active": user.is_active,
-            "created_at": user.created_at.isoformat() if user.created_at else None
-        }
+        "user": user
     }
 
-@router.post("/register", response_model=UserSchema, status_code=status.HTTP_201_CREATED)
+@router.post("/refresh", response_model=Token)
+async def refresh_token(
+    token_data: RefreshTokenRequest,
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    """Обновление access token по refresh token"""
+    token_service = TokenService(db)
+    result = token_service.refresh_access_token(
+        refresh_token=token_data.refresh_token,
+        user_agent=request.headers.get("user-agent"),
+        ip=request.client.host
+    )
+    
+    if not result:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Недействительный или просроченный refresh token"
+        )
+    
+    new_access, new_refresh, user = result
+    return {
+        "access_token": new_access,
+        "refresh_token": new_refresh,
+        "token_type": "bearer",
+        "user": user
+    }
+
+@router.post("/logout")
+async def logout(
+    logout_data: LogoutRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Выход: отзыв refresh token"""
+    token_service = TokenService(db)
+    token_service.logout(logout_data.refresh_token, current_user.id)
+    return {"message": "Выход выполнен успешно"}
+
+@router.post("/logout-all")
+async def logout_all(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Выход со всех устройств"""
+    token_service = TokenService(db)
+    count = token_service.logout_all(current_user.id)
+    return {"message": f"Завершено {count} сессий"}
+
+@router.post("/register", response_model=UserSchema, status_code=201)
 async def register(user_data: UserCreate, db: Session = Depends(get_db)):
     """Регистрация нового пользователя"""
-    print(f"Register attempt for email: {user_data.email}")
-    
-    try:
-        # Проверяем, нет ли пользователя с таким email
-        existing_user = db.query(User).filter(User.email == user_data.email).first()
-        if existing_user:
-            print(f"Register failed for {user_data.email}: email already exists")
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Пользователь с таким email уже существует"
-            )
-        
-        # Создаем нового пользователя
-        hashed_password = get_password_hash(user_data.password)
-        db_user = User(
-            email=user_data.email,
-            hashed_password=hashed_password,
-            full_name=user_data.full_name,
-            role=user_data.role if hasattr(user_data, 'role') else "user"
-        )
-        
-        db.add(db_user)
-        db.commit()
-        db.refresh(db_user)
-        
-        print(f"Register successful for {user_data.email} with role {db_user.role}")
-        
-        return db_user
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        db.rollback()
-        print(f"Register error for {user_data.email}: {str(e)}")
+    existing = db.query(User).filter(User.email == user_data.email).first()
+    if existing:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Ошибка при регистрации: {str(e)}"
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Пользователь с таким email уже существует"
         )
+    
+    hashed = get_password_hash(user_data.password)
+    db_user = User(
+        email=user_data.email,
+        hashed_password=hashed,
+        full_name=user_data.full_name,
+        role="user"  # По умолчанию обычный пользователь
+    )
+    db.add(db_user)
+    db.commit()
+    db.refresh(db_user)
+    return db_user
 
 @router.get("/me", response_model=UserSchema)
 async def get_current_user_info(current_user: User = Depends(get_current_user)):
-    """Получить информацию о текущем пользователе"""
+    """Информация о текущем пользователе"""
     return current_user
 
+# Административные эндпоинты (из лабораторной №1)
 @router.get("/users", response_model=List[UserSchema])
 async def get_users(
     skip: int = 0,
@@ -126,24 +138,8 @@ async def get_users(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_admin_user)
 ):
-    """Получить список всех пользователей (только для администратора)"""
-    users = db.query(User).offset(skip).limit(limit).all()
-    return users
-
-@router.get("/users/{user_id}", response_model=UserSchema)
-async def get_user(
-    user_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_admin_user)
-):
-    """Получить информацию о конкретном пользователе (только для администратора)"""
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Пользователь не найден"
-        )
-    return user
+    """Список всех пользователей (только admin)"""
+    return db.query(User).offset(skip).limit(limit).all()
 
 @router.put("/users/{user_id}/role", response_model=UserSchema)
 async def change_user_role(
@@ -152,28 +148,19 @@ async def change_user_role(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_admin_user)
 ):
-    """Изменить роль пользователя (доступно только администратору)"""
+    """Изменение роли пользователя (только admin)"""
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Пользователь не найден"
-        )
-
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
+    
     new_role = role_data.get("role")
     if new_role not in ["admin", "manager", "user"]:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Недопустимая роль. Допустимые значения: admin, manager, user"
-        )
-
+        raise HTTPException(status_code=400, detail="Недопустимая роль")
+    
     # Не даем админу понизить самого себя
     if user.id == current_user.id and new_role != "admin":
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Нельзя изменить собственную роль"
-        )
-
+        raise HTTPException(status_code=400, detail="Нельзя изменить собственную роль")
+    
     user.role = new_role
     db.commit()
     db.refresh(user)

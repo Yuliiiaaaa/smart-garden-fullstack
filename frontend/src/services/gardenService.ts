@@ -52,7 +52,7 @@ export const gardenService = {
     const response = await apiClient.post<GardenType>('/gardens/', gardenData);
     return response;
   },
-
+  
   getGardenTrees: async (gardenId: number): Promise<TreeData[]> => {
     const response = await apiClient.get<TreeData[]>(`/trees/?garden_id=${gardenId}`);
     return response;

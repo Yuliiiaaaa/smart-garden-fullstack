@@ -10,6 +10,7 @@ export interface ApiError {
 
 export interface AuthResponse {
   access_token: string;
+  refresh_token: string; 
   token_type: string;
   user: User;
 }
@@ -68,17 +69,14 @@ export interface AnalysisResult {
   model: string;
 }
 
-// Функция для получения токена
-export const getAuthToken = (): string | null => {
-  return localStorage.getItem('token');
-};
+export const getAuthToken = (): string | null => localStorage.getItem('access_token');
+export const setAuthToken = (token: string): void => localStorage.setItem('access_token', token);
 
-// Функция для установки токена
-export const setAuthToken = (token: string): void => {
-  localStorage.setItem('token', token);
-};
+export const getRefreshToken = (): string | null => localStorage.getItem('refresh_token');
+export const setRefreshToken = (token: string): void => localStorage.setItem('refresh_token', token);
 
-// Функция для удаления токена
-export const removeAuthToken = (): void => {
-  localStorage.removeItem('token');
+export const removeTokens = (): void => {
+  localStorage.removeItem('access_token');
+  localStorage.removeItem('refresh_token');
+  localStorage.removeItem('user');
 };

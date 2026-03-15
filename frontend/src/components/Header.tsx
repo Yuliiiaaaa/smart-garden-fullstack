@@ -3,13 +3,14 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Leaf, User, LogOut, Settings, Users } from 'lucide-react';
 import { Button } from './ui/button';
 import { useState, useEffect } from 'react';
+import { getAuthToken, getRefreshToken, removeTokens } from '../services/apiConfig';
+import { authService } from '../services/authService';
 
 interface HeaderProps {
   isLoggedIn?: boolean;
   userName?: string;
 }
 
-// Интерфейс пользователя из localStorage
 interface UserData {
   id: number;
   email: string;
@@ -23,9 +24,8 @@ export function Header({ isLoggedIn = false, userName }: HeaderProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const [user, setUser] = useState<UserData | null>(null);
-  
+
   useEffect(() => {
-    // Загружаем пользователя из localStorage при монтировании
     try {
       const userStr = localStorage.getItem('user');
       if (userStr) {
@@ -34,24 +34,21 @@ export function Header({ isLoggedIn = false, userName }: HeaderProps) {
     } catch (error) {
       console.error('Ошибка при получении пользователя:', error);
     }
-  }, [isLoggedIn]); // Обновляем при изменении isLoggedIn
-  
+  }, [isLoggedIn]);
+
   const isActive = (path: string): boolean => location.pathname === path;
-  
-  // Получаем имя пользователя
+
   const getUserName = (): string => {
     if (userName) return userName;
     if (user) return user.full_name || user.email;
     return 'Пользователь';
   };
-  
-  // Получаем роль пользователя
+
   const getUserRole = (): string => {
     if (user) return user.role;
     return 'user';
   };
-  
-  // Получаем отображаемое название роли
+
   const getRoleDisplay = (): string => {
     const role = getUserRole();
     switch (role) {
@@ -60,8 +57,7 @@ export function Header({ isLoggedIn = false, userName }: HeaderProps) {
       default: return 'Пользователь';
     }
   };
-  
-  // Получаем цвет для роли
+
   const getRoleColor = (): string => {
     const role = getUserRole();
     switch (role) {
@@ -70,19 +66,23 @@ export function Header({ isLoggedIn = false, userName }: HeaderProps) {
       default: return 'bg-gray-100 text-gray-700';
     }
   };
-  
-  const handleLogout = (): void => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
+
+  const handleLogout = async () => {
+    const refreshToken = getRefreshToken();   // теперь функция импортирована
+    if (refreshToken) {
+      await authService.logout(refreshToken).catch(() => {});
+    } else {
+      removeTokens();   // теперь функция импортирована
+    }
     setUser(null);
     navigate('/');
   };
-  
+
   const actualUserName = getUserName();
   const userRole = getUserRole();
   const roleDisplay = getRoleDisplay();
   const roleColor = getRoleColor();
-  
+
   return (
     <header className="border-b bg-white/80 backdrop-blur-md shadow-sm sticky top-0 z-50">
       <div className="container mx-auto px-6 py-4 flex items-center justify-between max-w-7xl">
@@ -92,61 +92,60 @@ export function Header({ isLoggedIn = false, userName }: HeaderProps) {
           </div>
           <span className="text-xl text-primary">Умный Сад</span>
         </Link>
-        
+
         <nav className="flex items-center gap-6">
           {isLoggedIn || user ? (
             <>
-              <Link 
-                to="/dashboard" 
+              <Link
+                to="/dashboard"
                 className={`transition-colors ${
-                  isActive('/dashboard') 
-                    ? 'text-primary font-semibold' 
+                  isActive('/dashboard')
+                    ? 'text-primary font-semibold'
                     : 'text-muted-foreground hover:text-primary'
                 }`}
               >
                 Дашборд
               </Link>
-              
-              <Link 
-                to="/analysis" 
+
+              <Link
+                to="/analysis"
                 className={`transition-colors ${
-                  isActive('/analysis') 
-                    ? 'text-primary font-semibold' 
+                  isActive('/analysis')
+                    ? 'text-primary font-semibold'
                     : 'text-muted-foreground hover:text-primary'
                 }`}
               >
                 Анализ
               </Link>
-              
-              <Link 
-                to="/history" 
+
+              <Link
+                to="/history"
                 className={`transition-colors ${
-                  isActive('/history') 
-                    ? 'text-primary font-semibold' 
+                  isActive('/history')
+                    ? 'text-primary font-semibold'
                     : 'text-muted-foreground hover:text-primary'
                 }`}
               >
                 История
               </Link>
-              
-              <Link 
-                to="/analytics" 
+
+              <Link
+                to="/analytics"
                 className={`transition-colors ${
-                  isActive('/analytics') 
-                    ? 'text-primary font-semibold' 
+                  isActive('/analytics')
+                    ? 'text-primary font-semibold'
                     : 'text-muted-foreground hover:text-primary'
                 }`}
               >
                 Аналитика
               </Link>
 
-              {/* Ссылки для менеджера и администратора */}
               {(userRole === 'manager' || userRole === 'admin') && (
-                <Link 
-                  to="/gardens/manage" 
+                <Link
+                  to="/gardens/manage"
                   className={`flex items-center gap-1 transition-colors ${
-                    isActive('/gardens/manage') 
-                      ? 'text-primary font-semibold' 
+                    isActive('/gardens/manage')
+                      ? 'text-primary font-semibold'
                       : 'text-muted-foreground hover:text-primary'
                   }`}
                 >
@@ -154,14 +153,13 @@ export function Header({ isLoggedIn = false, userName }: HeaderProps) {
                   <span>Управление садами</span>
                 </Link>
               )}
-              
-              {/* Ссылки только для администратора */}
+
               {userRole === 'admin' && (
-                <Link 
-                  to="/admin/users" 
+                <Link
+                  to="/admin/users"
                   className={`flex items-center gap-1 transition-colors ${
-                    isActive('/admin/users') 
-                      ? 'text-primary font-semibold' 
+                    isActive('/admin/users')
+                      ? 'text-primary font-semibold'
                       : 'text-muted-foreground hover:text-primary'
                   }`}
                 >
@@ -169,7 +167,7 @@ export function Header({ isLoggedIn = false, userName }: HeaderProps) {
                   <span>Пользователи</span>
                 </Link>
               )}
-              
+
               <div className="flex items-center gap-3 ml-4">
                 <div className="flex items-center gap-2 bg-secondary/10 px-3 py-1.5 rounded-full">
                   <User className="size-4" />
@@ -178,10 +176,10 @@ export function Header({ isLoggedIn = false, userName }: HeaderProps) {
                     {roleDisplay}
                   </span>
                 </div>
-                
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
+
+                <Button
+                  variant="ghost"
+                  size="sm"
                   onClick={handleLogout}
                   className="text-red-600 hover:text-red-700 hover:bg-red-50"
                   aria-label="Выйти"
@@ -192,21 +190,16 @@ export function Header({ isLoggedIn = false, userName }: HeaderProps) {
             </>
           ) : (
             <>
-              <Link 
-                to="/" 
+              <Link
+                to="/"
                 className={`transition-colors ${
-                  isActive('/') 
-                    ? 'text-primary font-semibold' 
-                    : 'text-muted-foreground hover:text-primary'
+                  isActive('/') ? 'text-primary font-semibold' : 'text-muted-foreground hover:text-primary'
                 }`}
               >
                 Главная
               </Link>
-              
-              <Button 
-                asChild 
-                className="shadow-md hover:shadow-lg transition-all"
-              >
+
+              <Button asChild className="shadow-md hover:shadow-lg transition-all">
                 <Link to="/auth">Войти / Регистрация</Link>
               </Button>
             </>

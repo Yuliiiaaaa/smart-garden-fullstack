@@ -25,29 +25,15 @@ export function AuthPage() {
   
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!loginEmail || !loginPassword) {
-      loginRequest.execute(() => Promise.reject(new Error('Заполните все поля')));
-      return;
-    }
-    
+    if (!loginEmail || !loginPassword) return;
     try {
-      const result = await loginRequest.execute(() => 
+      const result = await loginRequest.execute(() =>
         authService.login(loginEmail, loginPassword)
       );
-      
-      // Сохраняем токен
-      setAuthToken(result.access_token);
-      
-      // Сохраняем пользователя в localStorage
-      localStorage.setItem('user', JSON.stringify(result.user));
-      
-      console.log('Login successful, token saved:', result.access_token.substring(0, 20) + '...');
-      console.log('User data:', result.user);
-      
+      // Токены уже сохранены в сервисе
       navigate('/dashboard');
     } catch (error) {
-      console.error('Login error:', error);
+      // ошибка уже обработана
     }
   };
   

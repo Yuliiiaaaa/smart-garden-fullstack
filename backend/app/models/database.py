@@ -19,9 +19,10 @@ class User(Base):
     role = Column(String(20), default="user", nullable=False)  # admin, manager, user
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
-
+    
     # Связи
     harvest_records = relationship("HarvestRecord", back_populates="user", cascade="all, delete-orphan")
+    refresh_tokens = relationship("RefreshToken", back_populates="user", cascade="all, delete-orphan")
 
 class Garden(Base):
     """Модель сада"""
@@ -49,29 +50,45 @@ class Tree(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 class HarvestRecord(Base):
-    """Модель записи урожая (ОБНОВЛЕННАЯ ВЕРСИЯ)"""
+    """Модель записи урожая"""
     __tablename__ = "harvest_records"
     
     id = Column(Integer, primary_key=True, index=True)
-    tree_id = Column(Integer, nullable=True)  # Может быть NULL
-    garden_id = Column(Integer, nullable=True)  # Добавляем garden_id
+    tree_id = Column(Integer, nullable=True)
+    garden_id = Column(Integer, nullable=True)
     fruit_count = Column(Integer, nullable=False)
-    fruit_type = Column(String(50), nullable=True, default='apple')  # Добавляем fruit_type
+    fruit_type = Column(String(50), nullable=True, default='apple')
     image_path = Column(String(500), nullable=True)
     confidence_score = Column(Float, default=0.0)
-    processing_time = Column(Float, nullable=True)  # Добавляем processing_time
+    processing_time = Column(Float, nullable=True)
     harvest_date = Column(DateTime, default=datetime.utcnow)
-    user_id = Column(Integer, ForeignKey('users.id'), nullable=True)  # Добавляем user_id с ForeignKey
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     # Связи
     user = relationship("User", back_populates="harvest_records")
 
+class RefreshToken(Base):
+    """Модель refresh токенов"""
+    __tablename__ = "refresh_tokens"
+
+    id = Column(Integer, primary_key=True, index=True)
+    token = Column(String(500), unique=True, index=True, nullable=False)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+    revoked = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    user_agent = Column(String(255), nullable=True)
+    ip_address = Column(String(50), nullable=True)
+
+    # Связь с пользователем
+    user = relationship("User", back_populates="refresh_tokens")
+
 # Настройка подключения к БД
 DATABASE_URL = "sqlite:///./smart_garden.db"
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 
-# Создаем таблицы
+# Создаем таблицы (ВАЖНО: теперь включает refresh_tokens)
 Base.metadata.create_all(bind=engine)
 
 # Создаем сессию для работы с БД
@@ -91,7 +108,7 @@ def create_test_users():
     try:
         from app.core.security import get_password_hash
         
-        # Удаляем старых тестовых пользователей (опционально)
+        # Удаляем старых тестовых пользователей
         db.query(User).filter(User.email.in_([
             "admin@example.com",
             "manager@example.com", 
@@ -99,7 +116,7 @@ def create_test_users():
             "test@example.com"
         ])).delete(synchronize_session=False)
         
-        # Список тестовых пользователей с разными ролями
+        # Список тестовых пользователей
         test_users = [
             {
                 "email": "admin@example.com",
@@ -136,19 +153,16 @@ def create_test_users():
         print(" Тестовые пользователи успешно созданы!")
         
     except Exception as e:
-        print(f"  Ошибка при создании тестовых пользователей: {e}")
+        print(f" Ошибка при создании тестовых пользователей: {e}")
         db.rollback()
     finally:
         db.close()
-
-# app/models/database.py
-# В конец файла добавьте функцию create_test_data:
 
 def create_test_data():
     """Создает тестовые данные: сады, деревья"""
     db = SessionLocal()
     try:
-        # Очищаем старые тестовые данные (опционально)
+        # Очищаем старые тестовые данные
         db.query(Tree).delete()
         db.query(Garden).delete()
         db.commit()
@@ -203,7 +217,7 @@ def create_test_data():
         for garden in created_gardens:
             db.refresh(garden)
         
-        print(" Созданы тестовые сады:")
+        print("✅ Созданы тестовые сады:")
         for garden in created_gardens:
             print(f"   - {garden.name} ({garden.fruit_type}, {garden.area} га)")
         
@@ -237,7 +251,7 @@ def create_test_data():
                     tree_counter += 1
         
         db.commit()
-        print(f" Создано {tree_counter - 1} тестовых деревьев")
+        print(f"✅ Создано {tree_counter - 1} тестовых деревьев")
         
         # Создаем тестовые записи урожая
         import random
@@ -270,18 +284,28 @@ def create_test_data():
                 db.add(new_record)
         
         db.commit()
-        print(" Созданы тестовые записи урожая")
-        
-        print(" Все тестовые данные успешно созданы!")
+        print("✅ Созданы тестовые записи урожая")
+        print("✅ Все тестовые данные успешно созданы!")
         
     except Exception as e:
-        print(f" Ошибка при создании тестовых данных: {e}")
+        print(f"❌ Ошибка при создании тестовых данных: {e}")
         import traceback
         traceback.print_exc()
         db.rollback()
     finally:
         db.close()
 
+# Удаляем старую базу данных перед созданием новой (для тестирования)
+import os
+if os.path.exists("smart_garden.db"):
+    os.remove("smart_garden.db")
+    print("🗑️ Удалена старая база данных")
 
-# Обновляем вызов
+# Создаем все таблицы (включая refresh_tokens)
+print("🔄 Создание таблиц в базе данных...")
+Base.metadata.create_all(bind=engine)
+print("✅ Таблицы успешно созданы!")
+
+# Создаем тестовых пользователей и данные
 create_test_users()
+create_test_data()

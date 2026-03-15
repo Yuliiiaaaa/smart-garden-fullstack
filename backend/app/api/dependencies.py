@@ -1,19 +1,19 @@
+# app/api/dependencies.py
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
-from app.core.security import verify_token
+
 from app.models.database import get_db, User
-from app.models.schemas import UserRole
+from app.core.token_service import TokenService
 
 security = HTTPBearer(auto_error=False)
 
-#П олучает пользователя из БД по email, извлеченного из JWT.
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
     db: Session = Depends(get_db)
-):
-    """Получает текущего пользователя из токена"""
-    if credentials is None:
+) -> User:
+    """Получить текущего пользователя по access token"""
+    if not credentials:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Требуется авторизация",
@@ -21,9 +21,10 @@ async def get_current_user(
         )
     
     token = credentials.credentials
-    token_data = verify_token(token)
+    token_service = TokenService(db)
+    token_data = token_service.verify_access_token(token)
     
-    if token_data is None:
+    if not token_data:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Неверный или просроченный токен",
@@ -31,7 +32,7 @@ async def get_current_user(
         )
     
     user = db.query(User).filter(User.email == token_data.email).first()
-    if user is None:
+    if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Пользователь не найден",
@@ -45,9 +46,8 @@ async def get_current_user(
     
     return user
 
-# Зависимости для проверки ролей
-async def get_admin_user(current_user: User = Depends(get_current_user)):
-    """Проверяет что пользователь администратор"""
+# Ролевые проверки
+async def get_admin_user(current_user: User = Depends(get_current_user)) -> User:
     if current_user.role != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -55,8 +55,7 @@ async def get_admin_user(current_user: User = Depends(get_current_user)):
         )
     return current_user
 
-async def get_manager_user(current_user: User = Depends(get_current_user)):
-    """Проверяет что пользователь менеджер или администратор"""
+async def get_manager_user(current_user: User = Depends(get_current_user)) -> User:
     if current_user.role not in ["admin", "manager"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
