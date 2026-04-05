@@ -10,7 +10,7 @@ import { gardenService } from '../services/gardenService';
 import { analyticsService } from '../services/analyticsService';
 import { analysisService } from '../services/analysisService';
 import { useApiRequest } from '../hooks/useApiRequest';
-
+import { GardenWeather } from './GardenWeather';
 interface Garden {
   id: number;
   name: string;
@@ -268,7 +268,13 @@ export function Dashboard() {
                   <p className="text-muted-foreground mb-1">
                     {garden.tree_count || '?'} деревьев
                   </p>
-                  
+                    <div className="mt-2">
+                      <GardenWeather 
+                        gardenId={garden.id} 
+                        lat={55.751244} 
+                        lon={37.618423} 
+                      />
+                    </div>
                   <div className="mt-4">
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-sm text-muted-foreground">Урожайность:</span>

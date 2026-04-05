@@ -1,4 +1,4 @@
-// src/components/AnalysisPage.tsx (обновленный)
+// src/components/AnalysisPage.tsx
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Upload, Info, Loader2 } from 'lucide-react';
@@ -67,13 +67,11 @@ export function AnalysisPage() {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
       
-      // Проверка размера файла (макс 10MB)
       if (file.size > 10 * 1024 * 1024) {
         alert('Файл слишком большой. Максимальный размер: 10MB');
         return;
       }
       
-      // Проверка типа файла
       if (!file.type.match('image/jpeg') && !file.type.match('image/png')) {
         alert('Пожалуйста, загрузите изображение в формате JPG или PNG');
         return;
@@ -99,7 +97,6 @@ export function AnalysisPage() {
         })
       );
       
-      // Переходим на страницу результатов с данными
       navigate('/results', { state: { analysisResult: result } });
     } catch (error) {
       console.error('Ошибка анализа:', error);
@@ -141,7 +138,8 @@ export function AnalysisPage() {
                   <div className="mb-4">
                     <img 
                       src={previewUrl} 
-                      alt="Preview" 
+                      alt="Предпросмотр загружаемого изображения"  // ← осмысленный alt
+                      loading="lazy"  // ← LAZY LOADING
                       className="max-h-64 mx-auto rounded-lg object-contain"
                     />
                   </div>
@@ -166,7 +164,7 @@ export function AnalysisPage() {
           </CardContent>
         </Card>
         
-        {/* Analysis Settings */}
+        {/* Analysis Settings - остаётся без изменений */}
         <div className="mb-8">
           <div className="flex items-center gap-2 mb-4">
             <span className="text-2xl">⚙</span>

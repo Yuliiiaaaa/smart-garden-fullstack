@@ -1,10 +1,10 @@
 ﻿# app/main.py
-from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer
-from app.api.endpoints import health, auth, gardens, trees, analysis, analytics
+from app.api.endpoints import health, auth, gardens, trees, analysis, analytics, seo, weather
 import uvicorn
-
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 # Создаем security схему для Swagger
 security_scheme = HTTPBearer(
     scheme_name="JWT",
@@ -63,7 +63,8 @@ app.include_router(gardens.router, prefix="/api/v1/gardens", tags=["gardens"])
 app.include_router(trees.router, prefix="/api/v1/trees", tags=["trees"])
 app.include_router(analysis.router, prefix="/api/v1/analysis", tags=["analysis"])
 app.include_router(analytics.router, prefix="/api/v1/analytics", tags=["analytics"])
-
+app.include_router(weather.router, prefix="/api/v1/weather", tags=["weather"])
+app.include_router(seo.router, tags=["seo"])
 @app.get("/")
 async def root():
     return {"message": "Добро пожаловать в Smart Garden API!"}
@@ -78,6 +79,10 @@ async def api_status():
 async def options_handler(full_path: str):
     """Обработчик OPTIONS запросов для всех путей"""
     return {"message": "OK"}
+
+@app.exception_handler(404)
+async def custom_404_handler(request: Request, exc):
+    return JSONResponse(status_code=404, content={"detail": "Страница не найдена"})
 
 # Запуск сервера
 if __name__ == "__main__":

@@ -11,6 +11,7 @@ interface HeaderProps {
   userName?: string;
 }
 
+
 interface UserData {
   id: number;
   email: string;
@@ -153,7 +154,7 @@ export function Header({ isLoggedIn = false, userName }: HeaderProps) {
                   <span>Управление садами</span>
                 </Link>
               )}
-
+              {(userRole === 'manager' || userRole === 'admin') && (<Link to="/gardens" className="...">Сады</Link>)}
               {userRole === 'admin' && (
                 <Link
                   to="/admin/users"

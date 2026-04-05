@@ -11,6 +11,7 @@ import { GardensManagementPage } from './components/GardensManagementPage';   //
 import { AdminUsersPage } from './components/AdminUsersPage';                 // новый
 import { Toaster } from './components/ui/sonner';
 import { getAuthToken } from './services/apiConfig';
+import { GardensPage } from './components/GardensPage';
 
 // Компонент для проверки аутентификации
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
@@ -44,7 +45,7 @@ export default function App() {
           <Route path="/results" element={<ProtectedRoute><ResultsPage /></ProtectedRoute>} />
           <Route path="/analytics" element={<ProtectedRoute><AnalyticsPage /></ProtectedRoute>} />
           <Route path="/history" element={<ProtectedRoute><HistoryPage /></ProtectedRoute>} />
-
+          <Route path="/gardens" element={<RoleRoute allowedRoles={['manager', 'admin']}><GardensPage /></RoleRoute>} />
           {/* Маршруты с ролевыми ограничениями */}
           <Route
             path="/gardens/manage"

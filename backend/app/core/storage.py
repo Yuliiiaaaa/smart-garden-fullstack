@@ -1,7 +1,6 @@
-# app/core/storage.py
 import boto3
 from botocore.config import Config
-from fastapi import HTTPException, UploadFile
+from fastapi import UploadFile, HTTPException
 import uuid
 import os
 from app.core.config import settings
@@ -19,28 +18,21 @@ class StorageService:
         self.bucket = settings.S3_BUCKET_NAME
 
     async def upload_file(self, file: UploadFile, folder: str = "uploads") -> str:
-        # Проверка размера файла
+        # Проверка размера
         file.file.seek(0, 2)
         size = file.file.tell()
         file.file.seek(0)
         if size > settings.MAX_FILE_SIZE:
             raise HTTPException(400, f"File too large. Max size: {settings.MAX_FILE_SIZE} bytes")
-        
-        # Проверка MIME-типа
         if file.content_type not in settings.ALLOWED_MIME_TYPES:
             raise HTTPException(400, f"File type not allowed: {file.content_type}")
 
-        # Генерация уникального ключа
         ext = os.path.splitext(file.filename)[1]
         key = f"{folder}/{uuid.uuid4()}{ext}"
-        
-        # Загрузка в S3
-        self.client.upload_fileobj(file.file, self.bucket, key, 
-                                   ExtraArgs={"ContentType": file.content_type})
+        self.client.upload_fileobj(file.file, self.bucket, key, ExtraArgs={"ContentType": file.content_type})
         return key
 
     def get_presigned_url(self, key: str, expires_in: int = 3600) -> str | None:
-        """Генерирует временную ссылку для безопасного доступа к файлу."""
         try:
             return self.client.generate_presigned_url(
                 'get_object',
@@ -51,7 +43,6 @@ class StorageService:
             return None
 
     def delete_file(self, key: str) -> bool:
-        """Удаляет файл из хранилища."""
         try:
             self.client.delete_object(Bucket=self.bucket, Key=key)
             return True

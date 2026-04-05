@@ -7,7 +7,7 @@ from app.models.schemas import GardenCreate, GardenUpdate, Garden as GardenSchem
 from app.models.database import get_db, Garden, User, Tree, HarvestRecord
 from app.models.schemas import GardenCreate, GardenUpdate, Garden as GardenSchema, GardenFilterParams
 from app.api.dependencies import get_current_user, get_manager_user, get_admin_user
-
+from fastapi.responses import JSONResponse
 router = APIRouter()
 
 # Публичный эндпоинт (доступен всем аутентифицированным)
@@ -119,3 +119,34 @@ async def delete_garden(
     db.delete(db_garden)
     db.commit()
     return {"message": f"Сад '{db_garden.name}' удалён", "deleted_id": garden_id}
+
+
+@router.get("/{garden_id}/jsonld", include_in_schema=False)
+async def garden_jsonld(
+    garden_id: int, 
+    db: Session = Depends(get_db)
+):
+    """Структурированные данные JSON-LD для поисковых систем"""
+    garden = db.query(Garden).filter(Garden.id == garden_id).first()
+    if not garden:
+        raise HTTPException(status_code=404, detail="Сад не найден")
+    
+    json_ld = {
+        "@context": "https://schema.org",
+        "@type": "Place",
+        "name": garden.name,
+        "description": garden.description or f"Сад {garden.name} площадью {garden.area} га, выращивание {garden.fruit_type}.",
+        "address": {
+            "@type": "PostalAddress",
+            "addressLocality": garden.location
+        },
+        "geo": {
+            "@type": "GeoCoordinates",
+            "latitude": 0,  # можно добавить реальные координаты
+            "longitude": 0
+        },
+        "hasMap": f"https://smart-garden.ru/gardens/{garden_id}",
+        "url": f"https://smart-garden.ru/gardens/{garden_id}"
+    }
+    
+    return JSONResponse(content=json_ld, media_type="application/ld+json")

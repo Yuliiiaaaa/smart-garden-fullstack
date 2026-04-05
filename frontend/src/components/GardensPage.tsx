@@ -1,313 +1,276 @@
 import { useSearchParams } from 'react-router-dom';
-import { zodResolver } from '@hookform/resolvers/zod';
-import * as z from 'zod';
+import { useForm } from 'react-hook-form';
+import { useEffect, useState, useMemo } from 'react';  // ← добавлен useMemo
 import { useQuery } from '@tanstack/react-query';
 import { gardenService } from '../services/gardenService';
 import { Garden } from '../services/apiConfig';
-import { useEffect } from 'react';
-import { useForm, Resolver } from 'react-hook-form';
+import { Header } from './Header';
+import { SEO } from './SEO';  // ← импорт SEO компонента
+import { Button } from './ui/button';
+import { Input } from './ui/input';
+import { Label } from './ui/label';
+import { Card, CardContent } from './ui/card';
 
-// Определяем схему с правильными типами
-const filterSchema = z.object({
-  name: z.string(),
-  fruit_type: z.string(),
-  area_min: z.number().min(0).optional(),
-  area_max: z.number().min(0).optional(),
-  sort_by: z.enum(['name', 'area', 'created_at']),
-  sort_order: z.enum(['asc', 'desc']),
-  page: z.number().min(1),
-  limit: z.number().min(1).max(100),
-});
-
-// Явно указываем тип для формы
-type FilterValues = {
+interface Filters {
   name: string;
   fruit_type: string;
-  area_min?: number;
-  area_max?: number;
+  area_min: string;
+  area_max: string;
+  search: string;
   sort_by: 'name' | 'area' | 'created_at';
   sort_order: 'asc' | 'desc';
   page: number;
   limit: number;
-};
-
-// Создаём resolver с правильным приведением типа
-const resolver = zodResolver(filterSchema) as unknown as Resolver<FilterValues>;
-
-interface GardenQueryParams {
-  name?: string;
-  fruit_type?: string;
-  area_min?: number;
-  area_max?: number;
-  sort_by?: string;
-  sort_order?: string;
-  skip?: number;
-  limit?: number;
 }
 
 export function GardensPage() {
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [location] = useSearchParams();  // ← для получения текущего URL
   
-  // Функция для получения значений по умолчанию из URL
-  const getDefaultValues = (): FilterValues => {
-    return {
-      name: searchParams.get('name') || '',
-      fruit_type: searchParams.get('fruit_type') || '',
-      area_min: searchParams.get('area_min') ? Number(searchParams.get('area_min')) : undefined,
-      area_max: searchParams.get('area_max') ? Number(searchParams.get('area_max')) : undefined,
-      sort_by: (searchParams.get('sort_by') as FilterValues['sort_by']) || 'name',
-      sort_order: (searchParams.get('sort_order') as FilterValues['sort_order']) || 'asc',
-      page: Number(searchParams.get('page')) || 1,
-      limit: Number(searchParams.get('limit')) || 10,
-    };
-  };
+  // Вычисляем канонический URL без параметров пагинации/сортировки
+  const canonical = useMemo(() => {
+    const params = new URLSearchParams(location.toString());
+    params.delete('page');
+    params.delete('sort_by');
+    params.delete('sort_order');
+    const queryString = params.toString();
+    return queryString ? `/gardens?${queryString}` : '/gardens';
+  }, [location]);
 
-  // Используем form с явным типом
-  const form = useForm<FilterValues>({
-    resolver,
-    defaultValues: getDefaultValues(),
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Инициализация фильтров из URL
+  const [filters, setFilters] = useState<Filters>({
+    name: searchParams.get('name') || '',
+    fruit_type: searchParams.get('fruit_type') || '',
+    area_min: searchParams.get('area_min') || '',
+    area_max: searchParams.get('area_max') || '',
+    search: searchParams.get('search') || '',
+    sort_by: (searchParams.get('sort_by') as any) || 'name',
+    sort_order: (searchParams.get('sort_order') as any) || 'asc',
+    page: Number(searchParams.get('page')) || 1,
+    limit: Number(searchParams.get('limit')) || 10,
   });
 
-  const filters = form.watch();
-
-  // Синхронизация с URL
+  // Обновление URL при изменении фильтров
   useEffect(() => {
     const params = new URLSearchParams();
     Object.entries(filters).forEach(([key, val]) => {
-      if (val !== undefined && val !== '') {
-        params.set(key, String(val));
-      }
+      if (val && val !== '') params.set(key, String(val));
     });
     setSearchParams(params);
   }, [filters, setSearchParams]);
 
-  // Остальной код без изменений...
-  const getQueryParams = (filters: FilterValues): GardenQueryParams => {
-    const params: GardenQueryParams = {
-      sort_by: filters.sort_by,
-      sort_order: filters.sort_order,
-      skip: (filters.page - 1) * filters.limit,
-      limit: filters.limit,
-    };
-    
-    if (filters.name) params.name = filters.name;
-    if (filters.fruit_type) params.fruit_type = filters.fruit_type;
-    if (filters.area_min !== undefined) params.area_min = filters.area_min;
-    if (filters.area_max !== undefined) params.area_max = filters.area_max;
-    
-    return params;
-  };
-
-  // Запрос данных
-  const { data, isLoading } = useQuery<{ gardens: Garden[]; total: number }>({
+  // Запрос данных с бэкенда
+  const { data, isLoading, refetch } = useQuery({
     queryKey: ['gardens', filters],
     queryFn: async () => {
-      const params = getQueryParams(filters);
-      const gardens = await gardenService.getAllGardens(
-        params.skip || 0,
-        params.limit || 10
-      );
-      
-      // Фильтрация на клиенте
-      let filteredGardens = [...gardens];
-      
-      if (params.name) {
-        filteredGardens = filteredGardens.filter(g => 
-          g.name.toLowerCase().includes(params.name!.toLowerCase())
-        );
-      }
-      
-      if (params.fruit_type) {
-        filteredGardens = filteredGardens.filter(g => 
-          g.fruit_type === params.fruit_type
-        );
-      }
-      
-      if (params.area_min !== undefined) {
-        filteredGardens = filteredGardens.filter(g => g.area >= params.area_min!);
-      }
-      
-      if (params.area_max !== undefined) {
-        filteredGardens = filteredGardens.filter(g => g.area <= params.area_max!);
-      }
-      
-      // Сортировка
-      filteredGardens.sort((a, b) => {
-        let aVal: string | number = a[params.sort_by as keyof Garden] as string | number;
-        let bVal: string | number = b[params.sort_by as keyof Garden] as string | number;
-        
-        if (params.sort_order === 'asc') {
-          return aVal > bVal ? 1 : -1;
-        } else {
-          return aVal < bVal ? 1 : -1;
-        }
-      });
-      
-      return {
-        gardens: filteredGardens,
-        total: filteredGardens.length
+      const params = {
+        name: filters.name || undefined,
+        fruit_type: filters.fruit_type || undefined,
+        area_min: filters.area_min ? Number(filters.area_min) : undefined,
+        area_max: filters.area_max ? Number(filters.area_max) : undefined,
+        search: filters.search || undefined,
+        sort_by: filters.sort_by,
+        sort_order: filters.sort_order,
+        skip: (filters.page - 1) * filters.limit,
+        limit: filters.limit,
       };
+      const gardens = await gardenService.getAllGardens(params.skip, params.limit);
+      
+      // Фильтрация на клиенте (временное решение)
+      let filtered = gardens;
+      if (params.name) filtered = filtered.filter(g => g.name.toLowerCase().includes(params.name!.toLowerCase()));
+      if (params.fruit_type) filtered = filtered.filter(g => g.fruit_type === params.fruit_type);
+      if (params.area_min) filtered = filtered.filter(g => g.area >= params.area_min!);
+      if (params.area_max) filtered = filtered.filter(g => g.area <= params.area_max!);
+      if (params.search) {
+        filtered = filtered.filter(g => 
+          g.name.toLowerCase().includes(params.search!.toLowerCase()) ||
+          g.location.toLowerCase().includes(params.search!.toLowerCase())
+        );
+      }
+      // Сортировка
+      filtered.sort((a, b) => {
+        let aVal: any = a[params.sort_by as keyof Garden];
+        let bVal: any = b[params.sort_by as keyof Garden];
+        if (params.sort_order === 'asc') return aVal > bVal ? 1 : -1;
+        else return aVal < bVal ? 1 : -1;
+      });
+      return { gardens: filtered, total: filtered.length };
     },
   });
 
+  const handleFilterChange = (key: keyof Filters, value: any) => {
+    setFilters(prev => ({ ...prev, [key]: value, page: 1 }));
+  };
+
+  const totalPages = data ? Math.ceil(data.total / filters.limit) : 1;
+
   return (
-    <div className="container mx-auto p-4">
-      <h1 className="text-2xl font-bold mb-6">Управление садами</h1>
+    <>
+      {/* SEO компонент */}
+      <SEO 
+        title="Управление садами"
+        description="Просмотр, фильтрация и управление садами. Отслеживайте урожайность, площадь и типы плодов в ваших садах."
+        canonical={canonical}
+        noindex={false}
+      />
       
-      <div className="bg-white p-4 rounded-lg shadow mb-6">
-        <h2 className="text-lg font-semibold mb-4">Фильтры</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div>
-            <label className="block text-sm font-medium mb-1">Название</label>
-            <input 
-              {...form.register('name')} 
-              placeholder="Название сада"
-              className="w-full p-2 border rounded"
-            />
-          </div>
-          
-          <div>
-            <label className="block text-sm font-medium mb-1">Тип плодов</label>
-            <select {...form.register('fruit_type')} className="w-full p-2 border rounded">
-              <option value="">Все типы</option>
-              <option value="apple">🍎 Яблоки</option>
-              <option value="pear">🍐 Груши</option>
-              <option value="cherry">🍒 Вишни</option>
-            </select>
-          </div>
-          
-          <div>
-            <label className="block text-sm font-medium mb-1">Площадь (га)</label>
-            <div className="flex gap-2">
-              <input 
-                type="number" 
-                {...form.register('area_min', { valueAsNumber: true })} 
-                placeholder="От"
-                className="w-1/2 p-2 border rounded"
-              />
-              <input 
-                type="number" 
-                {...form.register('area_max', { valueAsNumber: true })} 
-                placeholder="До"
-                className="w-1/2 p-2 border rounded"
-              />
-            </div>
-          </div>
-          
-          <div>
-            <label className="block text-sm font-medium mb-1">Сортировка</label>
-            <select {...form.register('sort_by')} className="w-full p-2 border rounded">
-              <option value="name">По названию</option>
-              <option value="area">По площади</option>
-              <option value="created_at">По дате создания</option>
-            </select>
-          </div>
-          
-          <div>
-            <label className="block text-sm font-medium mb-1">Порядок</label>
-            <select {...form.register('sort_order')} className="w-full p-2 border rounded">
-              <option value="asc">По возрастанию</option>
-              <option value="desc">По убыванию</option>
-            </select>
-          </div>
-          
-          <div>
-            <label className="block text-sm font-medium mb-1">На странице</label>
-            <select {...form.register('limit', { valueAsNumber: true })} className="w-full p-2 border rounded">
-              <option value={10}>10</option>
-              <option value={20}>20</option>
-              <option value={50}>50</option>
-            </select>
-          </div>
-        </div>
-        
-        <div className="mt-4 flex gap-2">
-          <button 
-            type="button"
-            onClick={() => form.reset(getDefaultValues())}
-            className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
-          >
-            Сбросить фильтры
-          </button>
-        </div>
-      </div>
+      <div className="min-h-screen bg-background">
+        <Header isLoggedIn userName="Администратор" />
+        <main className="container mx-auto px-6 py-8 max-w-7xl">
+          <h1 className="text-3xl mb-6">Управление садами</h1>
 
-      {isLoading && (
-        <div className="text-center py-8">
-          <p className="text-gray-500">Загрузка садов...</p>
-        </div>
-      )}
-      
-      {!isLoading && data?.gardens && (
-        <>
-          <div className="mb-4 flex justify-between items-center">
-            <p className="text-gray-600">Найдено садов: <span className="font-semibold">{data.total}</span></p>
-          </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-            {data.gardens.map((garden: Garden) => (
-              <div key={garden.id} className="bg-white p-4 rounded-lg shadow hover:shadow-md transition-shadow">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <h3 className="font-semibold text-lg">{garden.name}</h3>
-                    <p className="text-sm text-gray-500">{garden.location}</p>
-                  </div>
-                  <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-sm">
-                    {garden.fruit_type === 'apple' && '🍎'}
-                    {garden.fruit_type === 'pear' && '🍐'}
-                    {garden.fruit_type === 'cherry' && '🍒'}
-                  </span>
+          {/* Блок фильтров */}
+          <Card className="mb-8">
+            <CardContent className="pt-6">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+                <div>
+                  <Label>Название</Label>
+                  <Input
+                    value={filters.name}
+                    onChange={(e) => handleFilterChange('name', e.target.value)}
+                    placeholder="Название сада"
+                  />
                 </div>
-                <div className="mt-2 flex justify-between items-center">
-                  <span className="text-gray-600">Площадь:</span>
-                  <span className="font-medium">{garden.area} га</span>
+                <div>
+                  <Label>Тип плодов</Label>
+                  <select
+                    className="w-full p-2 border rounded"
+                    value={filters.fruit_type}
+                    onChange={(e) => handleFilterChange('fruit_type', e.target.value)}
+                  >
+                    <option value="">Все</option>
+                    <option value="apple">Яблоки</option>
+                    <option value="pear">Груши</option>
+                    <option value="cherry">Вишни</option>
+                  </select>
                 </div>
-                {garden.created_at && (
-                  <div className="mt-1 text-xs text-gray-400">
-                    Создан: {new Date(garden.created_at).toLocaleDateString()}
+                <div>
+                  <Label>Площадь (га)</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      type="number"
+                      value={filters.area_min}
+                      onChange={(e) => handleFilterChange('area_min', e.target.value)}
+                      placeholder="от"
+                    />
+                    <Input
+                      type="number"
+                      value={filters.area_max}
+                      onChange={(e) => handleFilterChange('area_max', e.target.value)}
+                      placeholder="до"
+                    />
                   </div>
-                )}
+                </div>
+                <div>
+                  <Label>Поиск</Label>
+                  <Input
+                    value={filters.search}
+                    onChange={(e) => handleFilterChange('search', e.target.value)}
+                    placeholder="Название или локация"
+                  />
+                </div>
               </div>
-            ))}
-          </div>
 
-          {/* Пагинация */}
-          {data.total > filters.limit && (
-            <div className="flex items-center justify-center gap-4 mt-6">
-              <button 
-                onClick={() => form.setValue('page', filters.page - 1)} 
-                disabled={filters.page === 1}
-                className="px-4 py-2 bg-blue-500 text-white rounded disabled:bg-gray-300 hover:bg-blue-600 transition-colors"
-              >
-                ← Назад
-              </button>
-              <span className="text-lg font-medium">
-                Страница {filters.page} из {Math.ceil(data.total / filters.limit)}
-              </span>
-              <button 
-                onClick={() => form.setValue('page', filters.page + 1)}
-                disabled={filters.page >= Math.ceil(data.total / filters.limit)}
-                className="px-4 py-2 bg-blue-500 text-white rounded disabled:bg-gray-300 hover:bg-blue-600 transition-colors"
-              >
-                Вперёд →
-              </button>
-            </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                <div>
+                  <Label>Сортировка по</Label>
+                  <select
+                    className="w-full p-2 border rounded"
+                    value={filters.sort_by}
+                    onChange={(e) => handleFilterChange('sort_by', e.target.value)}
+                  >
+                    <option value="name">Названию</option>
+                    <option value="area">Площади</option>
+                    <option value="created_at">Дате создания</option>
+                  </select>
+                </div>
+                <div>
+                  <Label>Порядок</Label>
+                  <select
+                    className="w-full p-2 border rounded"
+                    value={filters.sort_order}
+                    onChange={(e) => handleFilterChange('sort_order', e.target.value)}
+                  >
+                    <option value="asc">По возрастанию</option>
+                    <option value="desc">По убыванию</option>
+                  </select>
+                </div>
+                <div>
+                  <Label>На странице</Label>
+                  <select
+                    className="w-full p-2 border rounded"
+                    value={filters.limit}
+                    onChange={(e) => handleFilterChange('limit', Number(e.target.value))}
+                  >
+                    <option value={5}>5</option>
+                    <option value={10}>10</option>
+                    <option value={20}>20</option>
+                    <option value={50}>50</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => {
+                  setFilters({
+                    name: '', fruit_type: '', area_min: '', area_max: '', search: '',
+                    sort_by: 'name', sort_order: 'asc', page: 1, limit: 10
+                  });
+                }}>
+                  Сбросить фильтры
+                </Button>
+                <Button onClick={() => refetch()}>Применить</Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Список садов */}
+          {isLoading && <p className="text-center py-8">Загрузка...</p>}
+          {!isLoading && data && (
+            <>
+              <div className="mb-4 text-gray-600">Найдено садов: {data.total}</div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                {data.gardens.map(garden => (
+                  <div key={garden.id} className="bg-white p-4 rounded shadow">
+                    <div className="flex justify-between">
+                      <h2 className="font-semibold text-lg">{garden.name}</h2>
+                      <span className="text-sm text-gray-500">{garden.fruit_type}</span>
+                    </div>
+                    <p className="text-gray-600">{garden.location}</p>
+                    <p className="text-sm mt-2">Площадь: {garden.area} га</p>
+                    {garden.created_at && (
+                      <p className="text-xs text-gray-400">Создан: {new Date(garden.created_at).toLocaleDateString()}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {/* Пагинация */}
+              {totalPages > 1 && (
+                <div className="flex justify-center gap-2">
+                  <Button
+                    variant="outline"
+                    disabled={filters.page === 1}
+                    onClick={() => handleFilterChange('page', filters.page - 1)}
+                  >
+                    Назад
+                  </Button>
+                  <span className="py-2 px-4">Страница {filters.page} из {totalPages}</span>
+                  <Button
+                    variant="outline"
+                    disabled={filters.page >= totalPages}
+                    onClick={() => handleFilterChange('page', filters.page + 1)}
+                  >
+                    Вперёд
+                  </Button>
+                </div>
+              )}
+            </>
           )}
-        </>
-      )}
-      
-      {!isLoading && data?.gardens.length === 0 && (
-        <div className="text-center py-12 bg-white rounded-lg shadow">
-          <p className="text-gray-500 text-lg mb-2">Сады не найдены</p>
-          <p className="text-gray-400">Попробуйте изменить параметры фильтрации</p>
-          <button 
-            onClick={() => form.reset(getDefaultValues())}
-            className="mt-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-          >
-            Сбросить фильтры
-          </button>
-        </div>
-      )}
-    </div>
+        </main>
+      </div>
+    </>
   );
 }

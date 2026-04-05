@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 import os
 from datetime import datetime
-
+import uuid 
 from app.models.database import get_db, User, Tree, HarvestRecord
 from app.models.schemas import AnalysisResult
 from app.api.dependencies import get_current_user
@@ -55,7 +55,7 @@ async def analyze_photo(
         s3_key = f"users/{current_user.id}/analysis/{uuid.uuid4()}{file_extension}"
         
         # Загружаем в S3
-        await storage.upload_fileobj(file.file, s3_key, file.content_type)
+        await storage.upload_file(file, folder=f"users/{current_user.id}")
         
         print(f" Файл загружен в S3: {s3_key}")
         print(f" Результат ИИ: {detection_result.get('total_fruits', 0)} плодов, уверенность: {detection_result.get('confidence', 0)}")
