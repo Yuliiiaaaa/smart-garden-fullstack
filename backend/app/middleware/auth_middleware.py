@@ -41,6 +41,7 @@ async def auth_middleware(request: Request, call_next):
         "/api/v1/health/detailed",
         "/api/v1/health/ready",
         "/api/v1/auth/login",
+        "/api/v1/auth/refresh",
         "/api/v1/auth/register",
         "/api/v1/analysis/demo",
     ]
@@ -120,6 +121,7 @@ async def role_middleware(request: Request, call_next):
         "/api/v1/health/detailed",
         "/api/v1/health/ready",
         "/api/v1/auth/login",
+        "/api/v1/auth/refresh",
         "/api/v1/auth/register",
         "/api/v1/analysis/demo",
     ]

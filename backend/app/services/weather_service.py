@@ -1,8 +1,10 @@
+# app/services/weather_service.py
 import httpx
 from tenacity import retry, stop_after_attempt, wait_exponential
-from app.core.config import settings
-from app.core.cache import cache  
 from fastapi import HTTPException
+from app.core.config import settings
+from app.core.cache import cache
+
 
 class WeatherService:
     def __init__(self):
@@ -12,6 +14,17 @@ class WeatherService:
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
     async def get_weather(self, lat: float, lon: float) -> dict:
+        # Если нет API ключа, возвращаем тестовые данные
+        if not self.api_key or self.api_key == "your_api_key_here":
+            return {
+                "temperature": 18.5,
+                "feels_like": 17.2,
+                "humidity": 65,
+                "description": "облачно с прояснениями",
+                "icon": "04d",
+                "wind_speed": 3.2
+            }
+
         cache_key = f"weather_{lat}_{lon}"
         cached = cache.get(cache_key)
         if cached:

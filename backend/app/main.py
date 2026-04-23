@@ -1,7 +1,7 @@
 ﻿# app/main.py
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer
-from app.api.endpoints import health, auth, gardens, trees, analysis, analytics, seo, weather
+from app.api.endpoints import health, auth, gardens, trees, analysis, analytics, seo, weather, files
 import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -64,6 +64,7 @@ app.include_router(trees.router, prefix="/api/v1/trees", tags=["trees"])
 app.include_router(analysis.router, prefix="/api/v1/analysis", tags=["analysis"])
 app.include_router(analytics.router, prefix="/api/v1/analytics", tags=["analytics"])
 app.include_router(weather.router, prefix="/api/v1/weather", tags=["weather"])
+app.include_router(files.router, prefix="/api/v1/files", tags=["files"])
 app.include_router(seo.router, tags=["seo"])
 @app.get("/")
 async def root():
