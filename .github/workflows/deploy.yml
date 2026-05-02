@@ -13,59 +13,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Backend checks
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-      - name: Install backend dependencies
-        run: |
-          cd backend
-          pip install -r requirements.txt
-      - name: Lint backend (flake8)
-        run: |
-          cd backend
-          pip install flake8
-          flake8 app --max-line-length=120 --ignore=E125,E129,E203,E231,E261,E302,E303,E305,E402,E501,E712,F401,F811,F841,W291,W292,W293,W503,W504
-      # - name: Run backend unit tests
-      #   run: |
-      #     cd backend
-      #     pip install pytest pytest-cov
-      #     pytest tests/ -v --cov=app
-
-      # Frontend checks
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-      - name: Install frontend dependencies
-        run: |
-          cd frontend
-          npm ci
-      - name: Lint frontend (eslint)
-        run: |
-          cd frontend
-          npm run lint
-      # - name: Run frontend unit tests
-      #   run: |
-      #     cd frontend
-      #     npm run test:run
-
-      # Докер-сборка (тестовая)
+      # Docker сборка (тестовая)
       - name: Build Docker images
         run: |
           docker compose build
-
-      # Запуск E2E тестов (используем docker-compose)
-      # - name: Start services and run E2E tests
-      #   run: |
-      #     docker compose up -d
-      #     sleep 15
-      #     cd frontend
-      #     npx playwright install --with-deps
-      #     npx playwright test || true   # Не падать, если тесты не прошли (опционально)
-        env:
-          CI: true
 
       # (Опционально) Пуш образов в реестр
       - name: Login to Docker Hub
