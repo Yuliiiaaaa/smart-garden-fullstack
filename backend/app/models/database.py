@@ -296,10 +296,10 @@ def create_test_data():
         db.close()
 
 # Удаляем старую базу данных перед созданием новой (для тестирования)
-import os
-if os.path.exists("smart_garden.db"):
-    os.remove("smart_garden.db")
-    print("🗑️ Удалена старая база данных")
+# import os
+# if os.path.exists("smart_garden.db"):
+#     os.remove("smart_garden.db")
+#     print("🗑️ Удалена старая база данных")
 
 # Создаем все таблицы (включая refresh_tokens)
 print("🔄 Создание таблиц в базе данных...")

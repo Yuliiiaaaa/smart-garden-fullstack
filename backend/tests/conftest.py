@@ -145,7 +145,7 @@ def mock_weather(mocker):
     return mock
 
 
-# Пропуск проблемных тестов
+
 import pytest
 
 

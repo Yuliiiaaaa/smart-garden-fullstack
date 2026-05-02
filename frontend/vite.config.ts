@@ -52,7 +52,7 @@ export default defineConfig({
   },
   build: {
     target: 'esnext',
-    outDir: '../static', // Изменили на static в корне проекта
+    outDir: 'dist',
     emptyOutDir: true,
     rollupOptions: {
       input: {

@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+      - smart-garden-data:/app/uploads
+    environment:
+      - DATABASE_URL=sqlite:///./smart_garden.db
+    env_file:
+      - ./backend/.env
+    networks:
+      - smart-garden-net
+
+  frontend:
+    build:
+      context: ./frontend
+      target: builder   # для разработки используем только сборщик?
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    command: npm run dev -- --host 0.0.0.0
+    networks:
+      - smart-garden-net
+
+networks:
+  smart-garden-net:

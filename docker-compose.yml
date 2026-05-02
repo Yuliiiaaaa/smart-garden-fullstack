@@ -1,0 +1,48 @@
+version: '3.8'
+
+services:
+  backend:
+    build: ./backend
+    container_name: smart-garden-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - smart-garden-data:/app/uploads
+      - ./backend/smart_garden.db:/app/smart_garden.db
+    env_file:
+      - ./backend/.env
+    environment:
+      - DATABASE_URL=sqlite:///./smart_garden.db
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - smart-garden-net
+
+  frontend:
+    build: ./frontend
+    container_name: smart-garden-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - smart-garden-net
+
+networks:
+  smart-garden-net:
+    driver: bridge
+
+volumes:
+  smart-garden-data:
