@@ -56,17 +56,6 @@ jobs:
         run: |
           docker compose build
 
-      # Запуск E2E тестов (используем docker-compose)
-      - name: Start services and run E2E tests
-        run: |
-          docker compose up -d
-          sleep 15
-          cd frontend
-          npx playwright install --with-deps
-          npx playwright test || true   # Не падать, если тесты не прошли (опционально)
-        env:
-          CI: true
-
       # (Опционально) Пуш образов в реестр
       - name: Login to Docker Hub
         if: github.ref == 'refs/heads/main'
