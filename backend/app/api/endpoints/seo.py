@@ -6,6 +6,7 @@ from app.models.database import get_db, Garden
 
 router = APIRouter()
 
+
 @router.get("/robots.txt", include_in_schema=False)
 async def robots():
     """robots.txt для поисковых систем"""
@@ -21,10 +22,11 @@ Sitemap: https://smart-garden.ru/sitemap.xml
 """
     return Response(content=content, media_type="text/plain")
 
+
 @router.get("/sitemap.xml", include_in_schema=False)
 async def sitemap(db: Session = Depends(get_db)):
     """Динамическая карта сайта для поисковых систем"""
-    base_url = "https://smart-garden.ru"  
+    base_url = "https://smart-garden.ru"
     now = datetime.utcnow().isoformat()
     urls = []
 
@@ -34,7 +36,7 @@ async def sitemap(db: Session = Depends(get_db)):
         ("/auth", 0.5, "Страница входа и регистрации"),
         ("/about", 0.7, "О проекте Smart Garden"),
     ]
-    
+
     for page, priority, _ in static_pages:
         urls.append(f"""
         <url>
@@ -69,7 +71,7 @@ async def sitemap(db: Session = Depends(get_db)):
         "/gardens/manage",
         "/admin/users",
     ]
-    
+
     for page in private_pages:
         urls.append(f"""
         <url>
@@ -84,5 +86,5 @@ async def sitemap(db: Session = Depends(get_db)):
         xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
 {''.join(urls)}
 </urlset>"""
-    
+
     return Response(content=sitemap_xml.strip(), media_type="application/xml")

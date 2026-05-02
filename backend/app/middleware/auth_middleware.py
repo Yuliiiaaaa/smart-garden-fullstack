@@ -5,10 +5,11 @@ from app.core.security import verify_token
 import time
 from starlette.status import HTTP_401_UNAUTHORIZED
 
+
 async def auth_middleware(request: Request, call_next):
     """
     Middleware для проверки аутентификации
-    
+
     Пропускает публичные эндпоинты:
     - /, /docs, /redoc, /openapi.json
     - /api/status
@@ -17,15 +18,17 @@ async def auth_middleware(request: Request, call_next):
     - /api/v1/analysis/demo
     - OPTIONS запросы (CORS preflight)
     """
-    
+
     # ВАЖНО: Пропускаем все OPTIONS запросы (preflight для CORS)
     if request.method == "OPTIONS":
         response = await call_next(request)
         response.headers["Access-Control-Allow-Origin"] = "*"
-        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS, PATCH"
+        response.headers["Access-Control-Allow-Methods"] = (
+            "GET, POST, PUT, DELETE, OPTIONS, PATCH"
+        )
         response.headers["Access-Control-Allow-Headers"] = "Authorization, Content-Type"
         return response
-    
+
     # Публичные эндпоинты (полные пути)
     public_paths = [
         "/",
@@ -34,7 +37,7 @@ async def auth_middleware(request: Request, call_next):
         "/openapi.json",
         "/api/status",
     ]
-    
+
     # Публичные эндпоинты с префиксами API v1
     public_api_paths = [
         "/api/v1/health",
@@ -45,25 +48,25 @@ async def auth_middleware(request: Request, call_next):
         "/api/v1/auth/register",
         "/api/v1/analysis/demo",
     ]
-    
+
     # Публичные пути с префиксами (документация)
     public_path_prefixes = [
         "/docs",
         "/redoc",
         "/openapi.json",
     ]
-    
+
     # Проверяем точное совпадение с публичными путями
     if request.url.path in public_paths or request.url.path in public_api_paths:
         print(f"DEBUG: Public path allowed: {request.url.path}")
         return await call_next(request)
-    
+
     # Проверяем префиксы
     for prefix in public_path_prefixes:
         if request.url.path.startswith(prefix):
             print(f"DEBUG: Public path with prefix allowed: {request.url.path}")
             return await call_next(request)
-    
+
     # Для остальных путей проверяем JWT токен
     auth_header = request.headers.get("Authorization")
     if not auth_header or not auth_header.startswith("Bearer "):
@@ -73,12 +76,12 @@ async def auth_middleware(request: Request, call_next):
             content={"detail": "Требуется авторизация. Используйте Bearer token."},
             headers={
                 "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Credentials": "true"
-            }
+                "Access-Control-Allow-Credentials": "true",
+            },
         )
-    
+
     token = auth_header.split(" ")[1]
-    
+
     # Проверяем токен
     token_data = verify_token(token)
     if not token_data:
@@ -88,17 +91,19 @@ async def auth_middleware(request: Request, call_next):
             content={"detail": "Неверный или просроченный токен"},
             headers={
                 "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Credentials": "true"
-            }
+                "Access-Control-Allow-Credentials": "true",
+            },
         )
-    
+
     # Добавляем информацию о пользователе в request state
     request.state.user_email = token_data.email
-    request.state.user_role = token_data.role if hasattr(token_data, 'role') else 'user'
-    
+    request.state.user_role = token_data.role if hasattr(token_data, "role") else "user"
+
     # Логирование запроса
-    print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {request.method} {request.url.path} - User: {token_data.email} ({request.state.user_role})")
-    
+    print(
+        f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {request.method} {request.url.path} - User: {token_data.email} ({request.state.user_role})"
+    )
+
     return await call_next(request)
 
 
@@ -109,7 +114,7 @@ async def role_middleware(request: Request, call_next):
     # Если это OPTIONS запрос (preflight), пропускаем
     if request.method == "OPTIONS":
         return await call_next(request)
-    
+
     # Пропускаем публичные пути
     public_paths = [
         "/",
@@ -125,12 +130,16 @@ async def role_middleware(request: Request, call_next):
         "/api/v1/auth/register",
         "/api/v1/analysis/demo",
     ]
-    
+
     if request.url.path in public_paths:
         return await call_next(request)
-    
+
     # Проверяем префиксы документации
-    if request.url.path.startswith("/docs") or request.url.path.startswith("/redoc") or request.url.path.startswith("/openapi.json"):
+    if (
+        request.url.path.startswith("/docs")
+        or request.url.path.startswith("/redoc")
+        or request.url.path.startswith("/openapi.json")
+    ):
         return await call_next(request)
-    
+
     return await call_next(request)

@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 from typing import Any, Optional
 
+
 class InMemoryCache:
     def __init__(self):
         self._store = {}
@@ -16,5 +17,6 @@ class InMemoryCache:
                 return value
             del self._store[key]
         return None
+
 
 cache = InMemoryCache()

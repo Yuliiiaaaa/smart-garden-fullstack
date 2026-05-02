@@ -12,7 +12,9 @@ class WeatherService:
         self.api_key = settings.OPENWEATHER_API_KEY
         self.client = httpx.AsyncClient(timeout=10.0)
 
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+    @retry(
+        stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10)
+    )
     async def get_weather(self, lat: float, lon: float) -> dict:
         # Если нет API ключа, возвращаем тестовые данные
         if not self.api_key or self.api_key == "your_api_key_here":
@@ -22,7 +24,7 @@ class WeatherService:
                 "humidity": 65,
                 "description": "облачно с прояснениями",
                 "icon": "04d",
-                "wind_speed": 3.2
+                "wind_speed": 3.2,
             }
 
         cache_key = f"weather_{lat}_{lon}"
@@ -36,7 +38,7 @@ class WeatherService:
             "lon": lon,
             "appid": self.api_key,
             "units": "metric",
-            "lang": "ru"
+            "lang": "ru",
         }
         try:
             response = await self.client.get(url, params=params)
@@ -48,14 +50,18 @@ class WeatherService:
                 "humidity": data["main"]["humidity"],
                 "description": data["weather"][0]["description"],
                 "icon": data["weather"][0]["icon"],
-                "wind_speed": data["wind"]["speed"]
+                "wind_speed": data["wind"]["speed"],
             }
             cache.set(cache_key, normalized, ttl=settings.WEATHER_CACHE_TTL)
             return normalized
         except httpx.HTTPStatusError as e:
-            raise HTTPException(status_code=e.response.status_code, detail="Weather API error")
+            raise HTTPException(
+                status_code=e.response.status_code, detail="Weather API error"
+            )
         except Exception as e:
-            raise HTTPException(status_code=503, detail=f"Weather service unavailable: {str(e)}")
+            raise HTTPException(
+                status_code=503, detail=f"Weather service unavailable: {str(e)}"
+            )
 
     async def close(self):
         await self.client.aclose()

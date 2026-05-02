@@ -4,7 +4,9 @@ from typing import List, Dict
 from fastapi import APIRouter, Depends
 from app.api.dependencies import get_current_user
 from app.models.database import User
+
 router = APIRouter()
+
 
 class AnalyticsData(BaseModel):
     period: str
@@ -12,8 +14,13 @@ class AnalyticsData(BaseModel):
     growth_percentage: float
     top_trees: List[Dict]
 
+
 @router.get("/overview")
-async def get_analytics_overview(garden_id: int = None, period: str = "month",current_user: User = Depends(get_current_user)):
+async def get_analytics_overview(
+    garden_id: int = None,
+    period: str = "month",
+    current_user: User = Depends(get_current_user),
+):
     """Получить общую аналитику"""
     return AnalyticsData(
         period="Сентябрь 2024",
@@ -22,30 +29,35 @@ async def get_analytics_overview(garden_id: int = None, period: str = "month",cu
         top_trees=[
             {"tree_id": 45, "fruit_count": 65},
             {"tree_id": 12, "fruit_count": 58},
-            {"tree_id": 78, "fruit_count": 52}
-        ]
+            {"tree_id": 78, "fruit_count": 52},
+        ],
     )
 
+
 @router.get("/growth")
-async def get_growth_analytics(garden_id: int = None, current_user: User = Depends(get_current_user)):
+async def get_growth_analytics(
+    garden_id: int = None, current_user: User = Depends(get_current_user)
+):
     """Получить данные по росту урожайности"""
     return {
         "weekly_data": [
             {"week": "Неделя 1", "fruits": 350},
             {"week": "Неделя 2", "fruits": 415},
             {"week": "Неделя 3", "fruits": 485},
-            {"week": "Неделя 4", "fruits": 600}
+            {"week": "Неделя 4", "fruits": 600},
         ],
-        "growth_trend": "positive"
+        "growth_trend": "positive",
     }
 
+
 @router.get("/predictions")
-async def get_predictions(garden_id: int = None, current_user: User = Depends(get_current_user)):
+async def get_predictions(
+    garden_id: int = None, current_user: User = Depends(get_current_user)
+):
     """Получить прогнозы урожайности"""
     return {
         "predicted_harvest": 2450,
         "confidence": 0.87,
         "recommended_harvest_date": "2024-10-05",
-        "risk_factors": ["погодные условия", "вредители"]
-    }   
-    
+        "risk_factors": ["погодные условия", "вредители"],
+    }
